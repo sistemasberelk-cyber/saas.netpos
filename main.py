@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
         # Multi-tenant migrations
         "CREATE TABLE IF NOT EXISTS tenant (id INTEGER PRIMARY KEY, name TEXT, subdomain TEXT, is_active BOOLEAN, created_at TIMESTAMP);",
         "ALTER TABLE settings ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
-        "ALTER TABLE user ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
+        "ALTER TABLE \"user\" ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
         "ALTER TABLE product ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
         "ALTER TABLE client ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
         "ALTER TABLE sale ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
@@ -1850,7 +1850,7 @@ async def restore_system_backup(file: UploadFile = File(...), session: Session =
         # Risk: Duplicate ID errors. 
         # Better: Wipe Users table too, but re-add the current user if they disapper?
         # Actually, if we restore, we restore the admin user from the backup too.
-        session.exec(text("DELETE FROM user")) 
+        session.exec(text('DELETE FROM "user"')) 
         session.exec(text("DELETE FROM settings"))
         
         session.commit()
