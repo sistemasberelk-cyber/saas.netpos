@@ -1518,7 +1518,8 @@ def print_labels_v2(
         })
 # --- Settings API ---
 @app.post("/api/settings")
-def update_settings(
+async def update_settings(
+    request: Request,
     company_name: Optional[str] = Form(None),
     printer_name: Optional[str] = Form(None),
     label_width_mm: Optional[int] = Form(None),
@@ -1528,6 +1529,9 @@ def update_settings(
     user: User = Depends(require_auth)
 ):
     SettingsService.ensure_admin(user)
+    form_data = await request.form()
+    SettingsService.validate_supported_fields(form_data.keys())
+
     settings = SettingsService.get_or_create_settings(session)
     SettingsService.apply_updates(
         session=session,

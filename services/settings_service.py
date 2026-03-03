@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
-from typing import Optional
+from typing import Iterable, Optional
 
 from fastapi import HTTPException, UploadFile
 from sqlmodel import Session, select
@@ -40,6 +40,15 @@ class SettingsService:
         return settings
 
     @staticmethod
+    def validate_supported_fields(received_fields: Iterable[str]) -> None:
+        unknown_fields = sorted(set(received_fields) - SettingsService.SUPPORTED_FIELDS)
+        if unknown_fields:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported settings fields: {', '.join(unknown_fields)}",
+            )
+
+    @staticmethod
     def apply_updates(
         session: Session,
         settings: Settings,
@@ -50,7 +59,10 @@ class SettingsService:
         logo_file: Optional[UploadFile] = None,
     ) -> Settings:
         if company_name is not None:
-            settings.company_name = company_name
+            normalized_company_name = company_name.strip()
+            if not normalized_company_name:
+                raise HTTPException(status_code=400, detail="company_name cannot be empty")
+            settings.company_name = normalized_company_name
 
         if printer_name is not None:
             settings.printer_name = printer_name
