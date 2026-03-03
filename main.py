@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
         "ALTER TABLE sale ADD COLUMN payment_status TEXT DEFAULT 'paid';"
     ]
     
-    print("🚀 Checking/Running Schema Migrations...")
+    print("🚀 [DEPLOY v2.5.1] Checking/Running Schema Migrations...")
     for stmt in migration_statements:
         try:
             session.exec(text(stmt))
@@ -77,7 +77,11 @@ async def lifespan(app: FastAPI):
                 print(f"⚠️ Migration Error on '{stmt}': {e}")
 
     # Seed Data
-    AuthService.create_default_user_and_settings(session)
+    try:
+        AuthService.create_default_user_and_settings(session)
+    except Exception as e:
+        print(f"⚠️ Seed Error (non-fatal): {e}")
+        session.rollback()
     seed_products(session)
     yield
 
