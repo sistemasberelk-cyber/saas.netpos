@@ -6,14 +6,15 @@ from sqlmodel import Session, select, func
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from typing import Optional, List
-import shutil
 import os
+import shutil
 
 from database.session import create_db_and_tables, get_session
 from database.models import Product, Sale, User, Settings, Client, Payment, Tax
 from database.seed_data import seed_products
 from services.stock_service import StockService
 from services.auth_service import AuthService
+from services.settings_service import SettingsService
 import barcode
 from barcode.writer import ImageWriter
 
@@ -31,6 +32,16 @@ async def lifespan(app: FastAPI):
     from sqlalchemy import text
     
     migration_statements = [
+        # Multi-tenant migrations
+        "CREATE TABLE IF NOT EXISTS tenant (id INTEGER PRIMARY KEY, name TEXT, subdomain TEXT, is_active BOOLEAN, created_at TIMESTAMP);",
+        "ALTER TABLE settings ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
+        "ALTER TABLE user ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
+        "ALTER TABLE product ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
+        "ALTER TABLE client ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
+        "ALTER TABLE sale ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
+        "ALTER TABLE payment ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
+        
+        # Existing migrations
         "ALTER TABLE settings ADD COLUMN tax_rate FLOAT DEFAULT 0.0;",
         "ALTER TABLE settings ADD COLUMN label_width_mm INTEGER DEFAULT 60;",
         "ALTER TABLE settings ADD COLUMN label_height_mm INTEGER DEFAULT 40;",
@@ -57,9 +68,13 @@ async def lifespan(app: FastAPI):
             print(f"✅ Executed: {stmt}")
         except Exception as e:
             session.rollback()
-            # Ignore "column already exists" errors, print others for debug
-            if "already exists" not in str(e) and "duplicate column" not in str(e):
-                 print(f"ℹ️ Skipped (likely exists): {stmt}")
+            err_str = str(e).lower()
+            # Ignore "column already exists" errors
+            if "already exists" in err_str or "duplicate column" in err_str:
+                 print(f"ℹ️ Skipped (already exists): {stmt}")
+            else:
+                # Log actual errors that might need attention
+                print(f"⚠️ Migration Error on '{stmt}': {e}")
 
     # Seed Data
     AuthService.create_default_user_and_settings(session)
@@ -83,21 +98,38 @@ def get_current_user(request: Request, session: Session = Depends(get_session)) 
     user_id = request.session.get("user_id")
     if not user_id:
         return None
-    return session.get(User, user_id)
+    user = session.get(User, user_id)
+    if user and not user.tenant_id:
+        # Fix legacy users without tenant
+        # In a real app we would redirect to tenant creation, here we assume default tenant 1 if exists
+        # Or better: fail login and tell them to contact admin
+        pass
+    return user
 
 def require_auth(request: Request, user: Optional[User] = Depends(get_current_user)):
     if not user:
         raise HTTPException(status_code=status.HTTP_302_FOUND, headers={"Location": "/login"})
     return user
 
-def get_settings(session: Session = Depends(get_session)) -> Settings:
-    # Always return the first settings row
-    return session.exec(select(Settings)).first()
+def get_tenant(request: Request, user: User = Depends(get_current_user)) -> int:
+    if not user or not user.tenant_id:
+        raise HTTPException(status_code=403, detail="No tenant associated")
+    return user.tenant_id
+
+def get_settings(tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)) -> Settings:
+    settings = session.exec(select(Settings).where(Settings.tenant_id == tenant_id)).first()
+    if not settings:
+        # Create default if missing
+        settings = Settings(tenant_id=tenant_id, company_name="New Shop")
+        session.add(settings)
+        session.commit()
+        session.refresh(settings)
+    return settings
 
 # --- Auth Routes ---
 
 from starlette.middleware.sessions import SessionMiddleware
-app.add_middleware(SessionMiddleware, secret_key="super-secret-nexpos-key")
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY", "super-secret-nexpos-key-change-me"))
 
 @app.get("/login", response_class=HTMLResponse)
 @app.head("/login")
@@ -121,10 +153,10 @@ def logout(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 @app.head("/")
-def get_dashboard(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), session: Session = Depends(get_session)):
-    total_products = session.exec(select(func.count(Product.id))).one()
-    low_stock = session.exec(select(func.count(Product.id)).where(Product.stock_quantity < Product.min_stock_level)).one()
-    recent_sales = session.exec(select(Sale).order_by(Sale.timestamp.desc()).limit(5)).all()
+def get_dashboard(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
+    total_products = session.exec(select(func.count(Product.id)).where(Product.tenant_id == tenant_id)).one()
+    low_stock = session.exec(select(func.count(Product.id)).where(Product.tenant_id == tenant_id, Product.stock_quantity < Product.min_stock_level)).one()
+    recent_sales = session.exec(select(Sale).where(Sale.tenant_id == tenant_id).order_by(Sale.timestamp.desc()).limit(5)).all()
     
     # Calculate Today's Sales
     from datetime import datetime, date
@@ -133,7 +165,7 @@ def get_dashboard(request: Request, user: User = Depends(require_auth), settings
     # Sum total_amount for sales >= today_start
     # SQLModel sum might return None if no rows
     today_sales_total = session.exec(
-        select(func.sum(Sale.total_amount)).where(Sale.timestamp >= today_start)
+        select(func.sum(Sale.total_amount)).where(Sale.tenant_id == tenant_id, Sale.timestamp >= today_start)
     ).one() or 0.0
     
     return templates.TemplateResponse("dashboard.html", {
@@ -148,14 +180,14 @@ def get_pos(request: Request, user: User = Depends(require_auth), settings: Sett
 
 @app.get("/products", response_class=HTMLResponse)
 @app.head("/products")
-def get_products_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), session: Session = Depends(get_session)):
-    products = session.exec(select(Product)).all()
+def get_products_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
+    products = session.exec(select(Product).where(Product.tenant_id == tenant_id)).all()
     return templates.TemplateResponse("products.html", {"request": request, "active_page": "products", "settings": settings, "user": user, "products": products})
 
 @app.get("/products/labels-100x60", response_class=HTMLResponse)
-def print_labels_100x60(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), session: Session = Depends(get_session)):
+def print_labels_100x60(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
     # Get all products (or filtering logic could be added)
-    products = session.exec(select(Product)).all()
+    products = session.exec(select(Product).where(Product.tenant_id == tenant_id)).all()
     
     # Prepare data for template
     labels_data = []
@@ -181,29 +213,39 @@ def print_labels_100x60(request: Request, user: User = Depends(require_auth), se
 
 
 @app.get("/clients", response_class=HTMLResponse)
-def get_clients_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), session: Session = Depends(get_session)):
-    clients = session.exec(select(Client)).all()
+def get_clients_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
+    clients = session.exec(select(Client).where(Client.tenant_id == tenant_id)).all()
     
-    # Calculate balances for each client
-    # Optimization: In a real app, use a SQL aggregation query. simpler loop for now.
+    # Calculate balances for each client (Optimized with aggregation)
+    # 1. Get all sales grouped by client (for this tenant)
+    sales_stmt = select(Sale.client_id, func.sum(Sale.total_amount).label('total')).where(Sale.tenant_id == tenant_id).group_by(Sale.client_id)
+    sales_result = session.exec(sales_stmt).all()
+    sales_map = {r.client_id: r.total for r in sales_result}
+
+    # 2. Get all payments grouped by client (for this tenant)
+    payments_stmt = select(Payment.client_id, func.sum(Payment.amount).label('total')).where(Payment.tenant_id == tenant_id).group_by(Payment.client_id)
+    payments_result = session.exec(payments_stmt).all()
+    payments_map = {r.client_id: r.total for r in payments_result}
+
+    # 3. Merge
     balances = {}
     for c in clients:
-        sales_total = session.exec(select(func.sum(Sale.total_amount)).where(Sale.client_id == c.id)).one() or 0.0
-        payments_total = session.exec(select(func.sum(Payment.amount)).where(Payment.client_id == c.id)).one() or 0.0
-        balances[c.id] = float(sales_total - payments_total)
+        s_total = sales_map.get(c.id, 0.0) or 0.0
+        p_total = payments_map.get(c.id, 0.0) or 0.0
+        balances[c.id] = float(s_total - p_total)
         
     return templates.TemplateResponse("clients.html", {"request": request, "active_page": "clients", "settings": settings, "user": user, "clients": clients, "balances": balances})
 
 @app.get("/clients/{id}/account", response_class=HTMLResponse)
-def get_client_account(id: int, request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), session: Session = Depends(get_session)):
+def get_client_account(id: int, request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
     client = session.get(Client, id)
-    if not client: raise HTTPException(404, "Client not found")
+    if not client or client.tenant_id != tenant_id: raise HTTPException(404, "Client not found")
     
     # 1. Get Sales
-    sales = session.exec(select(Sale).where(Sale.client_id == id)).all()
+    sales = session.exec(select(Sale).where(Sale.client_id == id, Sale.tenant_id == tenant_id)).all()
     
     # 2. Get Payments
-    payments_list = session.exec(select(Payment).where(Payment.client_id == id)).all()
+    payments_list = session.exec(select(Payment).where(Payment.client_id == id, Payment.tenant_id == tenant_id)).all()
     
     # 3. Calculate Balance & Mix Movements
     total_debt = sum(s.total_amount for s in sales)
@@ -240,21 +282,21 @@ def get_client_account(id: int, request: Request, user: User = Depends(require_a
     })
 
 @app.post("/api/clients/{id}/pay")
-def register_payment(id: int, amount: float = Form(...), note: Optional[str] = Form(None), session: Session = Depends(get_session), user: User = Depends(require_auth)):
+def register_payment(id: int, amount: float = Form(...), note: Optional[str] = Form(None), session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
     client = session.get(Client, id)
-    if not client: raise HTTPException(404, "Client not found")
+    if not client or client.tenant_id != tenant_id: raise HTTPException(404, "Client not found")
     
-    payment = Payment(client_id=id, amount=amount, note=note)
+    payment = Payment(tenant_id=tenant_id, client_id=id, amount=amount, note=note)
     session.add(payment)
     session.commit()
     
     return RedirectResponse(f"/clients/{id}/account", status_code=303)
 
 @app.get("/sales", response_class=HTMLResponse)
-def get_sales_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), session: Session = Depends(get_session)):
+def get_sales_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
     # All sales ordered by date
-    sales = session.exec(select(Sale).order_by(Sale.timestamp.desc())).all()
-    low_stock_products = session.exec(select(Product).where(Product.stock_quantity < Product.min_stock_level)).all()
+    sales = session.exec(select(Sale).where(Sale.tenant_id == tenant_id).order_by(Sale.timestamp.desc())).all()
+    low_stock_products = session.exec(select(Product).where(Product.tenant_id == tenant_id, Product.stock_quantity < Product.min_stock_level)).all()
     
     # Group Sales by Date
     from collections import defaultdict
@@ -284,18 +326,19 @@ def get_sales_page(request: Request, user: User = Depends(require_auth), setting
     })
 
 @app.post("/sales/backup", response_class=HTMLResponse)
-def trigger_backup(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), session: Session = Depends(get_session)):
+def trigger_backup(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
     from services.backup_service import perform_backup
     from datetime import datetime, date
     
     # Run backup
     result = perform_backup(session)
     
-    # If backup successful, DELETE today's sales to reset the counter
+    # If backup successful, DELETE today's sales to reset the counter (Only for this tenant)
     if result["status"] == "success":
         today = date.today()
         today_sales = session.exec(
             select(Sale).where(
+                Sale.tenant_id == tenant_id,
                 func.date(Sale.timestamp) == today
             )
         ).all()
@@ -307,8 +350,8 @@ def trigger_backup(request: Request, user: User = Depends(require_auth), setting
         session.commit()
     
     # Reload sales data to render the page (duplicated logic, could be refactored)
-    sales = session.exec(select(Sale).order_by(Sale.timestamp.desc())).all()
-    low_stock_products = session.exec(select(Product).where(Product.stock_quantity < Product.min_stock_level)).all()
+    sales = session.exec(select(Sale).where(Sale.tenant_id == tenant_id).order_by(Sale.timestamp.desc())).all()
+    low_stock_products = session.exec(select(Product).where(Product.tenant_id == tenant_id, Product.stock_quantity < Product.min_stock_level)).all()
     
     from collections import defaultdict
     daily_groups = defaultdict(list)
@@ -337,32 +380,18 @@ def trigger_backup(request: Request, user: User = Depends(require_auth), setting
         "backup_message": msg_text
     })
 
-@app.get("/settings", response_class=HTMLResponse)
-def get_settings_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings)):
-    return templates.TemplateResponse("settings.html", {"request": request, "active_page": "settings", "settings": settings, "user": user})
-
-@app.post("/settings")
-async def update_settings(request: Request, company_name: str = Form(...), logo_file: Optional[UploadFile] = File(None), settings: Settings = Depends(get_settings), session: Session = Depends(get_session), user: User = Depends(require_auth)):
-    settings.company_name = company_name
-    if logo_file and logo_file.filename:
-        file_location = f"static/images/{logo_file.filename}"
-        with open(file_location, "wb") as buffer:
-            shutil.copyfileobj(logo_file.file, buffer)
-        settings.logo_url = f"/{file_location}"
-    session.add(settings)
-    session.commit()
-    return RedirectResponse("/settings", status_code=302)
+# NOTE: Settings page route moved to unified section below (Settings & Admin v2.4)
 
 # --- API Endpoints ---
 
 # --- Products ---
 @app.get("/api/products/export")
-def export_products_api(session: Session = Depends(get_session), user: User = Depends(require_auth)):
+def export_products_api(session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
     import pandas as pd
     from io import BytesIO
     from fastapi.responses import StreamingResponse
     
-    products = session.exec(select(Product)).all()
+    products = session.exec(select(Product).where(Product.tenant_id == tenant_id)).all()
     
     data = []
     for p in products:
@@ -394,12 +423,12 @@ def export_products_api(session: Session = Depends(get_session), user: User = De
     return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 @app.get("/api/clients/export")
-def export_clients_api(session: Session = Depends(get_session), user: User = Depends(require_auth)):
+def export_clients_api(session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
     import pandas as pd
     from io import BytesIO
     from fastapi.responses import StreamingResponse
     
-    clients = session.exec(select(Client)).all()
+    clients = session.exec(select(Client).where(Client.tenant_id == tenant_id)).all()
     
     data = []
     for c in clients:
@@ -430,8 +459,8 @@ def export_clients_api(session: Session = Depends(get_session), user: User = Dep
     return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 @app.get("/api/products")
-def get_products_api(session: Session = Depends(get_session), user: User = Depends(require_auth)):
-    return session.exec(select(Product)).all()
+def get_products_api(session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
+    return session.exec(select(Product).where(Product.tenant_id == tenant_id)).all()
 
 @app.post("/api/products")
 def create_product_api(
@@ -448,17 +477,18 @@ def create_product_api(
     price_retail: Optional[float] = Form(None),
     image: Optional[UploadFile] = File(None), 
     session: Session = Depends(get_session), 
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant)
 ):
     final_barcode = barcode if barcode else ""
     product = Product(
+        tenant_id=tenant_id,
         name=name, price=price, stock_quantity=stock, description=description, barcode=final_barcode,
         category=category, item_number=item_number, cant_bulto=cant_bulto, numeracion=numeracion,
         price_bulk=price_bulk, price_retail=price_retail
     )
     
     if image and image.filename:
-        import shutil
         import uuid
         # Generate unique filename to avoid collisions
         ext = image.filename.split(".")[-1]
@@ -496,10 +526,11 @@ def update_product_api(
     price_retail: Optional[float] = Form(None),
     image: Optional[UploadFile] = File(None), 
     session: Session = Depends(get_session), 
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant)
 ):
     product = session.get(Product, id)
-    if not product: raise HTTPException(404, "Not found")
+    if not product or product.tenant_id != tenant_id: raise HTTPException(404, "Not found")
     product.name = name
     product.price = price
     product.stock_quantity = stock
@@ -515,7 +546,6 @@ def update_product_api(
         product.barcode = barcode
     
     if image and image.filename:
-        import shutil
         import uuid
         ext = image.filename.split(".")[-1]
         filename = f"{uuid.uuid4()}.{ext}"
@@ -529,24 +559,25 @@ def update_product_api(
     return product
 
 @app.delete("/api/products/{id}")
-def delete_product_api(id: int, session: Session = Depends(get_session), user: User = Depends(require_auth)):
+def delete_product_api(id: int, session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
     product = session.get(Product, id)
-    if not product: raise HTTPException(404, "Not found")
+    if not product or product.tenant_id != tenant_id: raise HTTPException(404, "Not found")
     session.delete(product)
     session.commit()
     return {"ok": True}
 
 # --- Products: Label Printing ---
 @app.get("/products/labels", response_class=HTMLResponse)
-def get_labels_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), session: Session = Depends(get_session)):
-    products = session.exec(select(Product)).all()
+def get_labels_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
+    products = session.exec(select(Product).where(Product.tenant_id == tenant_id)).all()
     return templates.TemplateResponse("print_labels_selection.html", {"request": request, "active_page": "products", "settings": settings, "user": user, "products": products})
 
 @app.post("/products/labels/print", response_class=HTMLResponse)
 async def print_labels(
     request: Request, 
     session: Session = Depends(get_session),
-    settings: Settings = Depends(get_settings)
+    settings: Settings = Depends(get_settings),
+    tenant_id: int = Depends(get_tenant)
 ):
     form = await request.form()
     selected_ids = form.getlist("selected_products")
@@ -557,7 +588,7 @@ async def print_labels(
     
     for pid_str in selected_ids:
         pid = int(pid_str)
-        product = session.get(Product, pid)
+        product = session.exec(select(Product).where(Product.id == pid, Product.tenant_id == tenant_id)).first()
         if product:
             qty = int(form.get(f"qty_{pid}", 1))
             
@@ -636,8 +667,8 @@ async def print_labels(
 
 # --- Clients ---
 @app.get("/api/clients")
-def get_clients_api(session: Session = Depends(get_session), user: User = Depends(require_auth)):
-    return session.exec(select(Client)).all()
+def get_clients_api(session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
+    return session.exec(select(Client).where(Client.tenant_id == tenant_id)).all()
 
 @app.post("/api/clients")
 def create_client_api(
@@ -652,9 +683,11 @@ def create_client_api(
     transport_name: Optional[str] = Form(None),
     transport_address: Optional[str] = Form(None),
     session: Session = Depends(get_session), 
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant)
 ):
     client = Client(
+        tenant_id=tenant_id,
         name=name, phone=phone, email=email, address=address, credit_limit=credit_limit,
         razon_social=razon_social, cuit=cuit, iva_category=iva_category,
         transport_name=transport_name, transport_address=transport_address
@@ -677,10 +710,11 @@ def update_client_api(
     transport_name: Optional[str] = Form(None),
     transport_address: Optional[str] = Form(None),
     session: Session = Depends(get_session), 
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant)
 ):
     client = session.get(Client, id)
-    if not client: raise HTTPException(404, "Not found")
+    if not client or client.tenant_id != tenant_id: raise HTTPException(404, "Not found")
     client.name = name
     client.phone = phone
     client.email = email
@@ -697,20 +731,21 @@ def update_client_api(
     return client
 
 @app.delete("/api/clients/{id}")
-def delete_client_api(id: int, session: Session = Depends(get_session), user: User = Depends(require_auth)):
+def delete_client_api(id: int, session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
     client = session.get(Client, id)
-    if not client: raise HTTPException(404, "Not found")
+    if not client or client.tenant_id != tenant_id: raise HTTPException(404, "Not found")
     session.delete(client)
     session.commit()
     return {"ok": True}
 
 # --- Sales ---
 @app.post("/api/sales")
-def create_sale_api(sale_data: dict, session: Session = Depends(get_session), user: User = Depends(require_auth)):
+def create_sale_api(sale_data: dict, session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
     try:
         sale = stock_service.process_sale(
             session, 
             user_id=user.id, 
+            tenant_id=tenant_id,
             items_data=sale_data["items"], 
             client_id=sale_data.get("client_id"),
             amount_paid=sale_data.get("amount_paid"),
@@ -721,9 +756,9 @@ def create_sale_api(sale_data: dict, session: Session = Depends(get_session), us
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/sales/{id}/remito", response_class=HTMLResponse)
-def get_sale_remito(id: int, request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), session: Session = Depends(get_session)):
+def get_sale_remito(id: int, request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
     sale = session.get(Sale, id)
-    if not sale:
+    if not sale or sale.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Sale not found")
     return templates.TemplateResponse("remito.html", {"request": request, "sale": sale, "settings": settings})
 
@@ -834,7 +869,8 @@ def migrate_schema_v5(session: Session = Depends(get_session), user: User = Depe
             import uuid
             barcode_val = p_data['item_number'] if len(p_data['item_number']) >= 4 else str(uuid.uuid4())[:12]
             
-            new_prod = Product(**p_data, barcode=barcode_val)
+            # Assume default tenant 1 for migration
+            new_prod = Product(tenant_id=1, **p_data, barcode=barcode_val)
             session.add(new_prod)
             products_added += 1
             
@@ -849,33 +885,13 @@ def migrate_schema_v5(session: Session = Depends(get_session), user: User = Depe
 
 @app.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings)):
-    if user.role != "admin": return RedirectResponse("/")
-    return templates.TemplateResponse("settings.html", {"request": request, "user": user, "settings": settings})
+    SettingsService.ensure_admin(user)
+    return templates.TemplateResponse("settings.html", {"request": request, "active_page": "settings", "user": user, "settings": settings})
 
 @app.get("/admin")
 def admin_redirect():
     # Fix for 500 error on legacy /admin
     return RedirectResponse("/settings")
-
-@app.post("/api/settings")
-def update_settings_api(
-    company_name: Optional[str] = Form(None),
-    printer_name: Optional[str] = Form(None),
-    session: Session = Depends(get_session),
-    user: User = Depends(require_auth)
-):
-    if user.role != "admin": raise HTTPException(403)
-    settings = session.exec(select(Settings)).first()
-    if not settings:
-        settings = Settings(company_name="My Company")
-        session.add(settings)
-    
-    if company_name: settings.company_name = company_name
-    if printer_name: settings.printer_name = printer_name
-    
-    session.add(settings)
-    session.commit()
-    return {"ok": True}
 
 # --- Import / Export (Excel) ---
 @app.get("/api/templates/download/{type}")
@@ -934,7 +950,7 @@ def download_import_template(type: str, user: User = Depends(require_auth)):
     return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 @app.post("/api/import/products")
-async def import_products(file: UploadFile = File(...), session: Session = Depends(get_session), user: User = Depends(require_auth)):
+async def import_products(file: UploadFile = File(...), session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
     if user.role != "admin": raise HTTPException(403)
     
     import pandas as pd
@@ -993,11 +1009,11 @@ async def import_products(file: UploadFile = File(...), session: Session = Depen
             
             existing = None
             if barcode:
-                existing = session.exec(select(Product).where(Product.barcode == barcode)).first()
+                existing = session.exec(select(Product).where(Product.barcode == barcode, Product.tenant_id == tenant_id)).first()
             
             # Fallback: Try match by item_number if barcode provided is None or not found
             if not existing and item_number:
-                 existing = session.exec(select(Product).where(Product.item_number == item_number)).first()
+                 existing = session.exec(select(Product).where(Product.item_number == item_number, Product.tenant_id == tenant_id)).first()
 
             if existing:
                 # Update
@@ -1024,6 +1040,7 @@ async def import_products(file: UploadFile = File(...), session: Session = Depen
                     barcode = f"TMP-{uuid.uuid4().hex[:8]}"
 
                 prod = Product(
+                    tenant_id=tenant_id,
                     name=name,
                     price=price,
                     stock_quantity=stock,
@@ -1240,6 +1257,12 @@ def create_tax(name: str = Form(...), rate: float = Form(...), session: Session 
 @app.delete("/api/taxes/{id}")
 def delete_tax(id: int, session: Session = Depends(get_session), user: User = Depends(require_auth)):
     if user.role != "admin": raise HTTPException(403)
+    tax = session.get(Tax, id)
+    if tax:
+        session.delete(tax)
+        session.commit()
+    return {"ok": True}
+
 # --- Picking (v2.5 Mobile) ---
 
 @app.get("/picking", response_class=HTMLResponse)
@@ -1347,9 +1370,10 @@ def picking_exit(
         sale_item = SaleItem(
             sale_id=new_sale.id,
             product_id=prod.id,
+            product_name=prod.name,
             quantity=item.qty,
             unit_price=prod.price,
-            subtotal=prod.price * item.qty
+            total=prod.price * item.qty
         )
         session.add(sale_item)
         
@@ -1367,7 +1391,7 @@ def picking_exit(
 
 # --- Test Data Seeder (Temporary) ---
 @app.get("/api/test/seed_products")
-def seed_test_products(session: Session = Depends(get_session), user: User = Depends(require_auth)):
+def seed_test_products(session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
     if user.role != "admin": raise HTTPException(403)
     
     products_data = [
@@ -1381,9 +1405,10 @@ def seed_test_products(session: Session = Depends(get_session), user: User = Dep
     
     added = 0
     for p in products_data:
-        existing = session.exec(select(Product).where(Product.barcode == p["barcode"])).first()
+        existing = session.exec(select(Product).where(Product.barcode == p["barcode"], Product.tenant_id == tenant_id)).first()
         if not existing:
             new_prod = Product(
+                tenant_id=tenant_id,
                 name=p["name"],
                 barcode=p["barcode"],
                 category=p["category"],
@@ -1494,33 +1519,35 @@ def print_labels_v2(
 # --- Settings API ---
 @app.post("/api/settings")
 def update_settings(
-    company_name: str = Form(...),
+    company_name: Optional[str] = Form(None),
     printer_name: Optional[str] = Form(None),
-    label_width_mm: int = Form(60),
-    label_height_mm: int = Form(40),
-    settings: Settings = Depends(get_settings),
+    label_width_mm: Optional[int] = Form(None),
+    label_height_mm: Optional[int] = Form(None),
+    logo_file: Optional[UploadFile] = File(None),
     session: Session = Depends(get_session),
     user: User = Depends(require_auth)
 ):
-    if user.role != "admin": raise HTTPException(403)
-    
-    settings.company_name = company_name
-    settings.printer_name = printer_name
-    settings.label_width_mm = label_width_mm
-    settings.label_height_mm = label_height_mm
-    
-    session.add(settings)
-    session.commit()
+    SettingsService.ensure_admin(user)
+    settings = SettingsService.get_or_create_settings(session)
+    SettingsService.apply_updates(
+        session=session,
+        settings=settings,
+        company_name=company_name,
+        printer_name=printer_name,
+        label_width_mm=label_width_mm,
+        label_height_mm=label_height_mm,
+        logo_file=logo_file,
+    )
     return {"status": "success"}
 
 @app.get("/api/admin/reset-inventory-from-excel")
-def reset_inventory_from_excel(session: Session = Depends(get_session), user: User = Depends(require_auth)):
+def reset_inventory_from_excel(session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
     if user.role != "admin": raise HTTPException(403)
     
     import pandas as pd
     import os
     import io
-    from sqlmodel import text
+    from sqlmodel import text, delete
     from database.models import Product  # Ensure Product is imported
 
     # Check for file
@@ -1529,11 +1556,9 @@ def reset_inventory_from_excel(session: Session = Depends(get_session), user: Us
         return {"error": "File 'productos.xlsx' not found on server root"}
         
     try:
-        # 1. Clear Products
-        session.exec(text("DELETE FROM product")) # Be careful with table name casing. Usually lowercase in sqlmodel/sqlalchemy if not specified.
-        # However, to be safe, we can use session.exec(delete(Product)) but that requires importing delete.
-        # Let's try explicit delete via ORM to cascade if needed, or raw SQL for speed.
-        # Raw SQL "DELETE FROM product" assumes table name 'product'. SQLModel defaults to class name lowercase.
+        # 1. Clear Products for this tenant only
+        # Use ORM delete to ensure constraints are handled if any, or raw SQL filtered by tenant_id
+        session.exec(delete(Product).where(Product.tenant_id == tenant_id))
         
         # 2. Read Excel
         df = pd.read_excel(file_path)
@@ -1731,9 +1756,6 @@ def reset_clients_from_excel(session: Session = Depends(get_session), user: User
                 
         return {"status": "success", "added": added, "updated": updated, "sheets_processed": len(sheet_names), "errors": errors}
         
-    except Exception as e:
-        return {"error": str(e)}
-
     except Exception as e:
         session.rollback()
         return {"error": str(e)}

@@ -25,22 +25,23 @@ class StockService:
         code.save(full_path) # saves as filename.svg
         return f"{filename}.svg"
 
-    def process_sale(self, session: Session, user_id: int, items_data: List[dict], payment_method: str = "cash", client_id: Optional[int] = None, amount_paid: Optional[float] = None) -> Sale:
+    def process_sale(self, session: Session, user_id: int, tenant_id: int, items_data: List[dict], payment_method: str = "cash", client_id: Optional[int] = None, amount_paid: Optional[float] = None) -> Sale:
         """
         Creates a Sale record and updates product stock.
         If client_id is provided and amount_paid > 0, creates a Payment record.
         items_data expected format: [{"product_id": 1, "quantity": 2}, ...]
         """
-        sale = Sale(user_id=user_id, payment_method=payment_method, client_id=client_id, timestamp=datetime.now())
+        sale = Sale(tenant_id=tenant_id, user_id=user_id, payment_method=payment_method, client_id=client_id, timestamp=datetime.now())
         total_sale = 0.0
         
         for item in items_data:
             p_id = item["product_id"]
             qty = item["quantity"]
             
-            product = session.get(Product, p_id)
+            # Verify product belongs to tenant
+            product = session.exec(select(Product).where(Product.id == p_id, Product.tenant_id == tenant_id)).first()
             if not product:
-                raise ValueError(f"Product {p_id} not found")
+                raise ValueError(f"Product {p_id} not found or access denied")
             
             if product.stock_quantity < qty:
                 raise ValueError(f"Insufficient stock for {product.name}")
@@ -78,17 +79,15 @@ class StockService:
             from database.models import Client
             from sqlalchemy import func
             client = session.get(Client, client_id)
-            if client and client.credit_limit:
-                 # Calculate current balance (Debt - Paid)
-                 # This logic mirrors main.py/clients logic
-                 # Note: Ideally this balance calculation should be a method on Client or Service
+            if client and client.tenant_id == tenant_id and client.credit_limit:
+                 # Calculate current balance (Debt - Paid) for this tenant
                  
                  # Sum previous sales total
-                 stmt_sales = select(func.sum(Sale.total_amount)).where(Sale.client_id == client_id)
+                 stmt_sales = select(func.sum(Sale.total_amount)).where(Sale.client_id == client_id, Sale.tenant_id == tenant_id)
                  current_debt = session.exec(stmt_sales).one() or 0.0
                  
                  # Sum payments
-                 stmt_payments = select(func.sum(Payment.amount)).where(Payment.client_id == client_id)
+                 stmt_payments = select(func.sum(Payment.amount)).where(Payment.client_id == client_id, Payment.tenant_id == tenant_id)
                  current_paid = session.exec(stmt_payments).one() or 0.0
                  
                  current_balance = current_debt - current_paid
@@ -112,8 +111,8 @@ class StockService:
         # Handle Payment if Client is selected
         if client_id and final_amount_paid > 0:
             # Create a payment record linked to this sale (conceptually via time/client)
-            # The Payment model needs client_id, amount. Note is optional.
             payment = Payment(
+                tenant_id=tenant_id,
                 client_id=client_id,
                 amount=final_amount_paid,
                 date=datetime.now(),

@@ -2,15 +2,30 @@ from typing import Optional, List
 from datetime import datetime
 from sqlmodel import Field, SQLModel, Relationship
 
+# --- Tenant Model (Multi-Tenancy) ---
+class Tenant(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    subdomain: Optional[str] = Field(default=None, unique=True, index=True) # For SaaS URL routing
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Relations
+    users: List["User"] = Relationship(back_populates="tenant")
+    settings: List["Settings"] = Relationship(back_populates="tenant")
+
 # --- Settings Model ---
 class Settings(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
+    tenant: Optional[Tenant] = Relationship(back_populates="settings")
+    
     company_name: str = Field(default="Berel K")
     logo_url: str = Field(default="/static/images/berelk_logo.png")
     tax_rate: Optional[float] = Field(default=0.0)
     printer_name: Optional[str] = Field(default=None)
     label_width_mm: int = Field(default=60)
-    label_height_mm: int = Field(default=40) # Printer name for backend printing
+    label_height_mm: int = Field(default=40)
 
 # --- Tax Model ---
 class Tax(SQLModel, table=True):
@@ -22,6 +37,8 @@ class Tax(SQLModel, table=True):
 # --- Client Model ---
 class Client(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
+    
     name: str = Field(index=True)
     phone: Optional[str] = None
     email: Optional[str] = None
@@ -42,6 +59,9 @@ class Client(SQLModel, table=True):
 # --- User Model ---
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
+    tenant: Optional[Tenant] = Relationship(back_populates="users")
+    
     username: str = Field(index=True, unique=True)
     password_hash: str  # We will store bcrypt hash, not plain text
     full_name: Optional[str] = None
@@ -53,6 +73,8 @@ class User(SQLModel, table=True):
 # --- Product Model ---
 class Product(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
+    
     name: str
     description: Optional[str] = None
     barcode: str = Field(unique=True, index=True) 
@@ -64,7 +86,7 @@ class Product(SQLModel, table=True):
     stock_quantity: int = Field(default=0)
     min_stock_level: int = Field(default=5) # Alert level
     category: Optional[str] = None
-    item_number: Optional[str] = Field(default=None, index=True) # New Field: Código de Articulo
+    item_number: Optional[str] = Field(default=None, index=True) # Código de Articulo
     image_url: Optional[str] = None
     
     # New Fields
@@ -76,6 +98,8 @@ class Product(SQLModel, table=True):
 # --- Sale Models (Header & Detail) ---
 class Sale(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
+    
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     total_amount: float = Field(default=0.0)
     payment_method: str = Field(default="cash") # cash, card, transfer
@@ -95,6 +119,7 @@ class SaleItem(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     sale_id: Optional[int] = Field(default=None, foreign_key="sale.id")
     product_id: Optional[int] = Field(default=None, foreign_key="product.id")
+    product: Optional["Product"] = Relationship(sa_relationship_kwargs={"lazy": "joined"})
     
     product_name: str # Snapshot in case product name changes
     quantity: int
@@ -106,6 +131,7 @@ class SaleItem(SQLModel, table=True):
 # --- Payment Model (Current Account) ---
 class Payment(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
     client_id: int = Field(foreign_key="client.id")
     amount: float
     date: datetime = Field(default_factory=datetime.utcnow)
@@ -113,3 +139,22 @@ class Payment(SQLModel, table=True):
     
     # Relationship
     client: Optional[Client] = Relationship(back_populates="payments")
+
+# --- Business Config Model (For AI Services) ---
+class BusinessConfig(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    business_name: str
+    tier: str = Field(default="standard") # standard, premium
+    
+    # LLM Keys
+    openai_api_key: Optional[str] = None
+    deepseek_api_key: Optional[str] = None
+    
+    # Voice Keys
+    elevenlabs_api_key: Optional[str] = None
+    
+    # Prompts
+    system_prompt: Optional[str] = "Eres un asistente de ventas útil."
+    voice_id: Optional[str] = None
+    
+    is_active: bool = Field(default=True)
