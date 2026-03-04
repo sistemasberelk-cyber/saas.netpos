@@ -376,12 +376,18 @@
         e.preventDefault();
         const data = new FormData(e.target);
 
-        // Ensure numbers are sent as numbers if possible, though FormData is strings.
-        // Backend handles conversion.
-
-        const res = await fetch('/api/settings', { method: 'POST', body: data });
-        if (res.ok) alert("Configuración guardada");
-        else alert("Error al guardar");
+        try {
+            const res = await fetch('/api/settings', { method: 'POST', body: data });
+            if (res.ok) {
+                alert("✅ Configuración guardada correctamente");
+            } else {
+                const err = await res.json().catch(() => null);
+                const detail = err && err.detail ? err.detail : `Error ${res.status}`;
+                alert(`❌ Error al guardar: ${detail}`);
+            }
+        } catch (err) {
+            alert("❌ Error de conexión. Verificá tu red e intentá de nuevo.");
+        }
     }
 
     async function seedData() {

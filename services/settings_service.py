@@ -11,6 +11,27 @@ from sqlmodel import Session, select
 from database.models import Settings, User
 
 
+# Magic byte signatures for supported image formats
+_IMAGE_SIGNATURES = [
+    (b"\x89PNG\r\n\x1a\n",),                          # PNG
+    (b"\xff\xd8\xff",),                                # JPEG
+    (b"RIFF", b"WEBP"),                                # WEBP (RIFF....WEBP)
+    (b"GIF87a", b"GIF89a"),                            # GIF
+    (b"<?xml", b"<svg"),                               # SVG (text-based)
+]
+
+MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB
+
+
+def _has_valid_image_signature(header: bytes) -> bool:
+    """Check if file header matches known image magic bytes."""
+    for sig_group in _IMAGE_SIGNATURES:
+        for sig in sig_group:
+            if header[:len(sig)] == sig:
+                return True
+    return False
+
+
 class SettingsService:
     SUPPORTED_FIELDS = {
         "company_name",
@@ -78,16 +99,33 @@ class SettingsService:
             settings.label_height_mm = label_height_mm
 
         if logo_file and logo_file.filename:
+            # 1. Check MIME type header
             if logo_file.content_type not in SettingsService.SUPPORTED_LOGO_CONTENT_TYPES:
-                raise HTTPException(status_code=400, detail="logo_file must be a valid image")
+                raise HTTPException(status_code=400, detail="logo_file must be a valid image (png, jpg, webp, gif, svg)")
 
+            # 2. Read file content and check size
+            file_content = logo_file.file.read()
+            if len(file_content) > MAX_LOGO_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"logo_file exceeds maximum size of {MAX_LOGO_SIZE_BYTES // (1024*1024)} MB",
+                )
+
+            # 3. Verify magic bytes (real file signature)
+            if not _has_valid_image_signature(file_content[:16]):
+                raise HTTPException(
+                    status_code=400,
+                    detail="logo_file content does not match a valid image format",
+                )
+
+            # 4. Save with UUID filename
             _, ext = os.path.splitext(logo_file.filename)
             ext = ext.lower() or ".png"
             file_name = f"logo-{uuid.uuid4().hex}{ext}"
             os.makedirs(os.path.join("static", "images"), exist_ok=True)
             file_location = os.path.join("static", "images", file_name)
             with open(file_location, "wb") as buffer:
-                shutil.copyfileobj(logo_file.file, buffer)
+                buffer.write(file_content)
             settings.logo_url = f"/{file_location}"
 
         session.add(settings)
