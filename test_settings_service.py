@@ -23,9 +23,10 @@ class DummySession:
 
 
 class DummyUploadFile:
-    def __init__(self):
-        self.filename = ""
-        self.file = None
+    def __init__(self, filename="", content_type="image/png", file=None):
+        self.filename = filename
+        self.content_type = content_type
+        self.file = file
 
 
 def test_validate_supported_fields_rejects_unknown_fields():
@@ -84,3 +85,24 @@ def test_apply_updates_updates_supported_fields():
     assert updated.label_height_mm == 50
     assert session.committed is True
     assert session.refreshed is True
+
+
+def test_apply_updates_rejects_invalid_logo_content_type():
+    session = DummySession()
+    settings = SimpleNamespace(
+        company_name="Old",
+        printer_name=None,
+        label_width_mm=60,
+        label_height_mm=40,
+        logo_url="/static/images/logo.png",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        SettingsService.apply_updates(
+            session=session,
+            settings=settings,
+            logo_file=DummyUploadFile(filename="script.exe", content_type="application/octet-stream"),
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "logo_file must be a valid image"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import uuid
 from typing import Iterable, Optional
 
 from fastapi import HTTPException, UploadFile
@@ -18,6 +19,7 @@ class SettingsService:
         "label_height_mm",
         "logo_file",
     }
+    SUPPORTED_LOGO_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"}
 
     @staticmethod
     def ensure_admin(user: User) -> None:
@@ -25,15 +27,12 @@ class SettingsService:
             raise HTTPException(status_code=403, detail="Admin role required")
 
     @staticmethod
-    def get_or_create_settings(session: Session, tenant_id: Optional[int] = None) -> Settings:
-        if tenant_id:
-            settings = session.exec(select(Settings).where(Settings.tenant_id == tenant_id)).first()
-        else:
-            settings = session.exec(select(Settings)).first()
+    def get_or_create_settings(session: Session) -> Settings:
+        settings = session.exec(select(Settings)).first()
         if settings:
             return settings
 
-        settings = Settings(company_name="Berel K", tenant_id=tenant_id)
+        settings = Settings(company_name="Berel K")
         session.add(settings)
         session.commit()
         session.refresh(settings)
@@ -65,7 +64,8 @@ class SettingsService:
             settings.company_name = normalized_company_name
 
         if printer_name is not None:
-            settings.printer_name = printer_name
+            normalized_printer_name = printer_name.strip()
+            settings.printer_name = normalized_printer_name or None
 
         if label_width_mm is not None:
             if label_width_mm <= 0:
@@ -78,8 +78,13 @@ class SettingsService:
             settings.label_height_mm = label_height_mm
 
         if logo_file and logo_file.filename:
+            if logo_file.content_type not in SettingsService.SUPPORTED_LOGO_CONTENT_TYPES:
+                raise HTTPException(status_code=400, detail="logo_file must be a valid image")
+
+            _, ext = os.path.splitext(logo_file.filename)
+            ext = ext.lower() or ".png"
+            file_name = f"logo-{uuid.uuid4().hex}{ext}"
             os.makedirs(os.path.join("static", "images"), exist_ok=True)
-            file_name = os.path.basename(logo_file.filename)
             file_location = os.path.join("static", "images", file_name)
             with open(file_location, "wb") as buffer:
                 shutil.copyfileobj(logo_file.file, buffer)
