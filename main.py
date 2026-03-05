@@ -124,9 +124,14 @@ def get_current_user(request: Request, session: Session = Depends(get_session)) 
     user = session.get(User, user_id)
     if user and not user.tenant_id:
         # Fix legacy users without tenant
-        # In a real app we would redirect to tenant creation, here we assume default tenant 1 if exists
-        # Or better: fail login and tell them to contact admin
-        pass
+        # Assign to the first tenant (default) to prevent "No tenant associated" error
+        from database.models import Tenant
+        tenant = session.exec(select(Tenant)).first()
+        if tenant:
+            user.tenant_id = tenant.id
+            session.add(user)
+            session.commit()
+            session.refresh(user)
     return user
 
 def require_auth(request: Request, user: Optional[User] = Depends(get_current_user)):
