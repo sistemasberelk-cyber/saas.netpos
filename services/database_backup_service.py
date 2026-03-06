@@ -61,6 +61,12 @@ def create_backup_file(session: Session) -> dict[str, Any]:
     with gzip.open(path, "wt", encoding="utf-8") as fh:
         json.dump(snapshot, fh, ensure_ascii=False)
 
+    # Apply retention policy: keep only the 10 most recent backups locally
+    try:
+        enforce_retention_policy(max_backups=10)
+    except Exception as e:
+        print(f"Warning: Failed to enforce retention policy: {e}")
+
     result = {
         "status": "success",
         "filename": filename,
@@ -106,3 +112,15 @@ def get_local_backup_path(filename: str) -> Path:
     if not path.exists() or path.suffix != ".gz":
         raise HTTPException(status_code=404, detail="Backup file not found")
     return path
+
+
+def enforce_retention_policy(max_backups: int = 10) -> None:
+    """Keep only the N most recent local backups, delete older ones."""
+    backups = list_local_backups()
+    if len(backups) > max_backups:
+        for old_backup in backups[max_backups:]:
+            path = BACKUP_DIR / old_backup["filename"]
+            try:
+                path.unlink(missing_ok=True)
+            except Exception as e:
+                print(f"Warning: failed to delete old backup {path.name}: {e}")

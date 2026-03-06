@@ -14,6 +14,7 @@ from services.database_backup_service import (
     create_backup_file,
     get_local_backup_path,
     list_local_backups,
+    enforce_retention_policy,
 )
 
 
@@ -127,3 +128,36 @@ def test_get_local_backup_path_success(tmp_path, monkeypatch):
 
     result = get_local_backup_path("db_backup_20260101_120000.json.gz")
     assert result == target
+
+
+# --------------- enforce_retention_policy ---------------
+
+def test_enforce_retention_policy_deletes_oldest(tmp_path, monkeypatch):
+    monkeypatch.setattr("services.database_backup_service.BACKUP_DIR", tmp_path)
+
+    # Create 3 files
+    for i in range(3):
+        f = tmp_path / f"db_backup_2026010{i+1}_000000.json.gz"
+        f.write_bytes(b"\x00")
+        os.utime(f, (1000000 + i*1000, 1000000 + i*1000))
+
+    # Keep only the 2 most recent
+    enforce_retention_policy(max_backups=2)
+
+    remaining = list_local_backups()
+    assert len(remaining) == 2
+    # The oldest (i=0) should be gone
+    filenames = [r["filename"] for r in remaining]
+    assert "db_backup_20260101_000000.json.gz" not in filenames
+    assert "db_backup_20260102_000000.json.gz" in filenames
+    assert "db_backup_20260103_000000.json.gz" in filenames
+
+def test_enforce_retention_policy_does_nothing_if_under_limit(tmp_path, monkeypatch):
+    monkeypatch.setattr("services.database_backup_service.BACKUP_DIR", tmp_path)
+
+    f = tmp_path / "db_backup_20260101_000000.json.gz"
+    f.write_bytes(b"\x00")
+
+    enforce_retention_policy(max_backups=5)
+
+    assert len(list_local_backups()) == 1
