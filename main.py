@@ -67,7 +67,8 @@ async def lifespan(app: FastAPI):
         "ALTER TABLE client ADD COLUMN transport_name TEXT;",
         "ALTER TABLE client ADD COLUMN transport_address TEXT;",
         "ALTER TABLE sale ADD COLUMN amount_paid FLOAT DEFAULT 0;",
-        "ALTER TABLE sale ADD COLUMN payment_status TEXT DEFAULT 'paid';"
+        "ALTER TABLE sale ADD COLUMN payment_status TEXT DEFAULT 'paid';",
+        "ALTER TABLE sale ADD COLUMN is_closed BOOLEAN DEFAULT FALSE;"
     ]
     
     print("🚀 [DEPLOY v2.6.0] Checking/Running Schema Migrations...")
@@ -177,16 +178,15 @@ def logout(request: Request):
 def get_dashboard(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
     total_products = session.exec(select(func.count(Product.id)).where(Product.tenant_id == tenant_id)).one()
     low_stock = session.exec(select(func.count(Product.id)).where(Product.tenant_id == tenant_id, Product.stock_quantity < Product.min_stock_level)).one()
-    recent_sales = session.exec(select(Sale).where(Sale.tenant_id == tenant_id).order_by(Sale.timestamp.desc()).limit(5)).all()
+    recent_sales = session.exec(select(Sale).where(Sale.tenant_id == tenant_id, Sale.is_closed == False).order_by(Sale.timestamp.desc()).limit(5)).all()
     
     # Calculate Today's Sales
 
     today_start = datetime.combine(date.today(), datetime.min.time())
     
-    # Sum total_amount for sales >= today_start
-    # SQLModel sum might return None if no rows
+    # Sum total_amount for sales >= today_start AND not closed
     today_sales_total = session.exec(
-        select(func.sum(Sale.total_amount)).where(Sale.tenant_id == tenant_id, Sale.timestamp >= today_start)
+        select(func.sum(Sale.total_amount)).where(Sale.tenant_id == tenant_id, Sale.timestamp >= today_start, Sale.is_closed == False)
     ).one() or 0.0
     
     return templates.TemplateResponse("dashboard.html", {
@@ -315,8 +315,8 @@ def register_payment(id: int, amount: float = Form(...), note: Optional[str] = F
 
 @app.get("/sales", response_class=HTMLResponse)
 def get_sales_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
-    # All sales ordered by date
-    sales = session.exec(select(Sale).where(Sale.tenant_id == tenant_id).order_by(Sale.timestamp.desc())).all()
+    # All open sales ordered by date
+    sales = session.exec(select(Sale).where(Sale.tenant_id == tenant_id, Sale.is_closed == False).order_by(Sale.timestamp.desc())).all()
     low_stock_products = session.exec(select(Product).where(Product.tenant_id == tenant_id, Product.stock_quantity < Product.min_stock_level)).all()
     
     # Group Sales by Date
@@ -361,24 +361,26 @@ def trigger_backup(request: Request, user: User = Depends(require_auth), setting
     # Run legacy backup to Google Sheets
     result = perform_backup(session)
     
-    # If backup successful, DELETE today's sales to reset the counter (Only for this tenant)
+    # If backup successful, mark today's sales as closed to clear the daily screens
     if result["status"] == "success":
+        from sqlalchemy import true
         today = date.today()
-        today_sales = session.exec(
+        # Look for open sales
+        open_sales = session.exec(
             select(Sale).where(
                 Sale.tenant_id == tenant_id,
-                func.date(Sale.timestamp) == today
+                Sale.is_closed == False
             )
         ).all()
         
-        for sale in today_sales:
-            # Delete associated sale items first (cascade should handle this, but being explicit)
-            session.delete(sale)
+        for sale in open_sales:
+            sale.is_closed = True
+            session.add(sale)
         
         session.commit()
     
     # Reload sales data to render the page (duplicated logic, could be refactored)
-    sales = session.exec(select(Sale).where(Sale.tenant_id == tenant_id).order_by(Sale.timestamp.desc())).all()
+    sales = session.exec(select(Sale).where(Sale.tenant_id == tenant_id, Sale.is_closed == False).order_by(Sale.timestamp.desc())).all()
     low_stock_products = session.exec(select(Product).where(Product.tenant_id == tenant_id, Product.stock_quantity < Product.min_stock_level)).all()
     
     from collections import defaultdict

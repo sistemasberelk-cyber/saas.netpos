@@ -105,6 +105,7 @@ class Sale(SQLModel, table=True):
     payment_method: str = Field(default="cash") # cash, card, transfer
     amount_paid: float = Field(default=0.0)
     payment_status: str = Field(default="paid") # paid, partial, pending
+    is_closed: bool = Field(default=False) # True if processed in Cierre de Caja
     
     # Foreign Keys
     user_id: Optional[int] = Field(default=None, foreign_key="user.id")
