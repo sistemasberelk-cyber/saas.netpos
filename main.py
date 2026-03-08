@@ -772,6 +772,169 @@ def delete_client_api(id: int, session: Session = Depends(get_session), user: Us
     session.commit()
     return {"ok": True}
 
+# --- Suppliers ---
+from services.purchase_service import PurchaseService
+
+@app.get("/suppliers", response_class=HTMLResponse)
+def get_suppliers_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
+    suppliers = session.exec(select(Supplier).where(Supplier.tenant_id == tenant_id)).all()
+    # Basic balance implementation for display
+    balances = {}
+    for s in suppliers:
+        # Debts - what we owe them
+        purchases = session.exec(select(Purchase).where(Purchase.supplier_id == s.id, Purchase.tenant_id == tenant_id)).all()
+        # What we paid them
+        payments = session.exec(select(CashMovement).where(CashMovement.reference_type == "supplier_payment", CashMovement.reference_id == s.id, CashMovement.tenant_id == tenant_id)).all()
+        total_owed = sum(p.total_amount for p in purchases)
+        total_paid = sum(abs(m.amount) for m in payments)
+        balances[s.id] = float(total_owed - total_paid)
+
+    return templates.TemplateResponse("suppliers.html", {"request": request, "active_page": "suppliers", "settings": settings, "user": user, "suppliers": suppliers, "balances": balances})
+
+@app.post("/api/suppliers")
+def create_supplier_api(
+    name: str = Form(...), 
+    phone: Optional[str] = Form(None), 
+    email: Optional[str] = Form(None), 
+    address: Optional[str] = Form(None), 
+    cuit: Optional[str] = Form(None),
+    notes: Optional[str] = Form(None),
+    session: Session = Depends(get_session), 
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant)
+):
+    supplier = PurchaseService.create_supplier(session, tenant_id=tenant_id, name=name, phone=phone, email=email, address=address, cuit=cuit, notes=notes)
+    return supplier
+
+@app.put("/api/suppliers/{id}")
+def update_supplier_api(
+    id: int, 
+    name: str = Form(...), 
+    phone: Optional[str] = Form(None), 
+    email: Optional[str] = Form(None), 
+    address: Optional[str] = Form(None), 
+    cuit: Optional[str] = Form(None),
+    notes: Optional[str] = Form(None),
+    session: Session = Depends(get_session), 
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant)
+):
+    supplier = session.get(Supplier, id)
+    if not supplier or supplier.tenant_id != tenant_id: raise HTTPException(404, "Not found")
+    supplier.name = name
+    supplier.phone = phone
+    supplier.email = email
+    supplier.address = address
+    supplier.cuit = cuit
+    supplier.notes = notes
+    session.add(supplier)
+    session.commit()
+    return supplier
+
+@app.delete("/api/suppliers/{id}")
+def delete_supplier_api(id: int, session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
+    supplier = session.get(Supplier, id)
+    if not supplier or supplier.tenant_id != tenant_id: raise HTTPException(404, "Not found")
+    session.delete(supplier)
+    session.commit()
+    return {"ok": True}
+
+@app.get("/suppliers/{id}/account", response_class=HTMLResponse)
+def get_supplier_account(id: int, request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
+    supplier = session.get(Supplier, id)
+    if not supplier or supplier.tenant_id != tenant_id: raise HTTPException(404, "Supplier not found")
+    
+    purchases = session.exec(select(Purchase).where(Purchase.supplier_id == id, Purchase.tenant_id == tenant_id)).all()
+    payments_list = session.exec(select(CashMovement).where(CashMovement.reference_type == "supplier_payment", CashMovement.reference_id == id, CashMovement.tenant_id == tenant_id)).all()
+    
+    total_debt = sum(p.total_amount for p in purchases)
+    total_paid = sum(abs(m.amount) for m in payments_list)
+    balance = float(total_debt - total_paid)
+    
+    movements = []
+    for p in purchases:
+        movements.append({
+            "date": p.timestamp,
+            "description": f"Factura/Remito: {p.invoice_number or 'N/A'}",
+            "amount": p.total_amount,
+            "type": "purchase"
+        })
+    for p_m in payments_list:
+        movements.append({
+            "date": p_m.timestamp,
+            "description": f"Pago: {p_m.concept or ''}",
+            "amount": abs(p_m.amount),
+            "type": "payment"
+        })
+        
+    movements.sort(key=lambda x: x["date"], reverse=True)
+    
+    return templates.TemplateResponse("supplier_account.html", {
+        "request": request, 
+        "active_page": "suppliers", 
+        "settings": settings, 
+        "user": user, 
+        "supplier": supplier,
+        "balance": balance,
+        "movements": movements
+    })
+
+@app.post("/api/suppliers/{id}/pay")
+def register_supplier_payment(id: int, amount: float = Form(...), note: Optional[str] = Form(None), session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
+    supplier = session.get(Supplier, id)
+    if not supplier or supplier.tenant_id != tenant_id: raise HTTPException(404, "Supplier not found")
+    
+    concept = f"Pago a proveedor: {supplier.name}"
+    if note:
+        concept += f" - {note}"
+        
+    PurchaseService.register_manual_cash_movement(
+        session=session,
+        tenant_id=tenant_id,
+        user_id=user.id,
+        amount=amount,
+        movement_type="out",
+        concept=concept,
+        reference_id=id,
+        reference_type="supplier_payment"
+    )
+    return RedirectResponse(f"/suppliers/{id}/account", status_code=303)
+
+# --- Cash Book ---
+@app.get("/cash", response_class=HTMLResponse)
+def get_cash_book(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
+    # All cash movements limit 100
+    movements = session.exec(select(CashMovement).where(CashMovement.tenant_id == tenant_id).order_by(CashMovement.timestamp.desc()).limit(100)).all()
+    
+    # Calculate totals
+    # To be accurate we should use sum
+    total_in = session.exec(select(func.sum(CashMovement.amount)).where(CashMovement.tenant_id == tenant_id, CashMovement.movement_type == 'in')).one() or 0.0
+    total_out = session.exec(select(func.sum(CashMovement.amount)).where(CashMovement.tenant_id == tenant_id, CashMovement.movement_type == 'out')).one() or 0.0
+    
+    balance = float(total_in + total_out) # Out is negative
+
+    return templates.TemplateResponse("cash_book.html", {
+        "request": request, "active_page": "cash", "settings": settings, "user": user, 
+        "movements": movements, "total_in": total_in, "total_out": abs(total_out), "balance": balance
+    })
+
+@app.post("/api/cash/movement")
+def create_cash_movement(movement_type: str = Form(...), amount: float = Form(...), concept: str = Form(...), session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
+    if movement_type not in ["in", "out"]:
+        raise HTTPException(400, "Invalid movement type")
+        
+    PurchaseService.register_manual_cash_movement(
+        session=session,
+        tenant_id=tenant_id,
+        user_id=user.id,
+        amount=amount,
+        movement_type=movement_type,
+        concept=concept,
+        reference_id=None,
+        reference_type="manual"
+    )
+    return RedirectResponse("/cash", status_code=303)
+
 # --- Sales ---
 @app.post("/api/sales")
 def create_sale_api(sale_data: dict, session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):

@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Proveedores - NexPos{% endblock %}
+
+{% block content %}
+<div class="glass-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <h2>Gestión de Proveedores</h2>
+        <div>
+            <button onclick="window.print()" class="btn" style="background-color: #2c3e50; margin-right: 8px;">🖨️
+                Imprimir Listado</button>
+            <button onclick="openModal()" class="btn">+ Nuevo Proveedor</button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Proveedor</th>
+                    <th>Contacto</th>
+                    <th>Saldo deudor</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for supplier in suppliers %}
+                <tr>
+                    <td>
+                        <div style="font-weight: 500;">{{ supplier.name }}</div>
+                        {% if supplier.cuit %}
+                        <div style="font-size: 0.75rem; color: #6b7280; font-family: monospace;">CUIT: {{ supplier.cuit
+                            }}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if supplier.phone %}<div>📱 {{ supplier.phone }}</div>{% endif %}
+                        {% if supplier.email %}<div>📧 {{ supplier.email }}</div>{% endif %}
+                        {% if supplier.address %}
+                        <div style="font-size: 0.75rem; color: #6b7280; margin-top: 2px;">📍 {{ supplier.address }}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div
+                            style="font-weight: bold; color: {% if balances[supplier.id] > 0 %}#ef4444{% else %}#10b981{% endif %};">
+                            ${{ balances[supplier.id] | round(2) }}
+                        </div>
+                    </td>
+                    <td>
+                        <a href="/suppliers/{{supplier.id}}/account" class="btn"
+                            style="padding: 4px 8px; font-size: 0.8rem; background: transparent; border: 1px solid #10b981; color: #10b981; margin-right: 8px; text-decoration: none;">Ver
+                            Cuenta</a>
+                        <button
+                            onclick="editSupplier('{{supplier.id}}', '{{supplier.name}}', '{{supplier.phone}}', '{{supplier.email}}', '{{supplier.address}}', '{{supplier.cuit}}', '{{supplier.notes}}')"
+                            class="btn"
+                            style="padding: 4px 8px; font-size: 0.8rem; background: transparent; border: 1px solid var(--primary-color); color: var(--primary-color);">Editar</button>
+                        <button onclick="deleteSupplier('{{supplier.id}}')" class="btn"
+                            style="padding: 4px 8px; font-size: 0.8rem; background: transparent; border: 1px solid #ef4444; color: #ef4444; margin-left: 8px;">Eliminar</button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 32px;">No hay proveedores registrados</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal -->
+<div id="supplier-modal"
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 100; justify-content: center; align-items: center;">
+    <div class="glass-card"
+        style="width: 95%; max-width: 600px; background: white; max-height: 90vh; overflow-y: auto;">
+        <h3 id="modal-title" style="margin-bottom: 24px;">Nuevo Proveedor</h3>
+        <form id="supplier-form" onsubmit="submitSupplier(event)">
+            <input type="hidden" id="edit-id" name="id">
+
+            <label style="display: block; margin-bottom: 8px; font-weight: 600;">Nombre del Proveedor / Empresa</label>
+            <input type="text" id="s-name" name="name" required placeholder="Distribuidora X"
+                style="margin-bottom: 16px;">
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                <div>
+                    <label style="display: block; margin-bottom: 4px; font-weight: 500;">CUIT</label>
+                    <input type="text" id="s-cuit" name="cuit" placeholder="30-12345678-9">
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 4px; font-weight: 500;">Teléfono / WhatsApp</label>
+                    <input type="text" id="s-phone" name="phone" placeholder="+54 9 11 1234-5678">
+                </div>
+            </div>
+
+            <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email</label>
+            <input type="email" id="s-email" name="email" placeholder="ventas@proveedor.com"
+                style="margin-bottom: 16px;">
+
+            <label style="display: block; margin-bottom: 8px; font-weight: 500;">Dirección Comercial</label>
+            <input type="text" id="s-address" name="address" placeholder="Av. Siempre Viva 742"
+                style="margin-bottom: 16px;">
+
+            <label style="display: block; margin-bottom: 8px; font-weight: 500;">Notas</label>
+            <textarea id="s-notes" name="notes" placeholder="Condiciones de pago, horarios..." rows="3"
+                style="margin-bottom: 24px; width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px;"></textarea>
+
+            <div style="text-align: right; display: flex; justify-content: flex-end; gap: 12px;">
+                <button type="button" onclick="closeModal()" class="btn"
+                    style="background: white; color: #666; border: 1px solid #e5e7eb; padding: 10px 24px;">Cancelar</button>
+                <button type="submit" class="btn"
+                    style="padding: 10px 32px; font-size: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">💾
+                    Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openModal() {
+        document.getElementById('supplier-modal').style.display = 'flex';
+        document.getElementById('supplier-form').reset();
+        document.getElementById('edit-id').value = '';
+        document.getElementById('modal-title').innerText = 'Nuevo Proveedor';
+    }
+    function closeModal() { document.getElementById('supplier-modal').style.display = 'none'; }
+
+    function editSupplier(id, name, phone, email, address, cuit, notes) {
+        document.getElementById('supplier-modal').style.display = 'flex';
+        document.getElementById('modal-title').innerText = 'Editar Proveedor';
+        document.getElementById('edit-id').value = id;
+        document.getElementById('s-name').value = name;
+        document.getElementById('s-phone').value = phone === 'None' ? '' : phone;
+        document.getElementById('s-email').value = email === 'None' ? '' : email;
+        document.getElementById('s-address').value = address === 'None' ? '' : address;
+        document.getElementById('s-cuit').value = cuit === 'None' ? '' : cuit;
+        document.getElementById('s-notes').value = notes === 'None' ? '' : notes;
+    }
+
+    async function deleteSupplier(id) {
+        if (!confirm('¿Estás seguro de eliminar este proveedor?')) return;
+        try {
+            const res = await fetch(`/api/suppliers/${id}`, { method: 'DELETE' });
+            if (res.ok) window.location.reload();
+            else alert('Error al eliminar');
+        } catch (e) { alert('Error de conexión'); }
+    }
+
+    async function submitSupplier(e) {
+        e.preventDefault();
+        const id = document.getElementById('edit-id').value;
+        const form = e.target;
+        const formData = new FormData(form);
+
+        const url = id ? `/api/suppliers/${id}` : '/api/suppliers';
+        const method = id ? 'PUT' : 'POST';
+
+        try {
+            const res = await fetch(url, { method: method, body: formData });
+            if (res.ok) window.location.reload();
+            else alert("Error al guardar");
+        } catch (err) { alert("Error de conexión"); }
+    }
+</script>
+<style>
+    @media print {
+        body * {
+            visibility: hidden;
+        }
+
+        .table-container,
+        .table-container * {
+            visibility: visible;
+        }
+
+        .table-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+        }
+
+        th:nth-child(4),
+        td:nth-child(4) {
+            display: none;
+        }
+    }
+</style>
+{% endblock %}
