@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Libro de Caja - NexPos{% endblock %}
+
+{% block content %}
+<div class="glass-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <h2>Gestión de Caja</h2>
+        <div style="display: flex; gap: 8px;">
+            <button onclick="window.print()" class="btn" style="background-color: #2c3e50;">🖨️
+                Imprimir</button>
+            <button onclick="openModal('in')" class="btn" style="background-color: #10b981;">💰 + Ingreso</button>
+            <button onclick="openModal('out')" class="btn" style="background-color: #ef4444;">💸 - Egreso</button>
+        </div>
+    </div>
+
+    <!-- Cajas Rápidas de Totales -->
+    <div
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px;">
+        <div class="dashboard-total-card"
+            style="padding: 16px; border-radius: 12px; border: 1px solid #10b981; background: rgba(16, 185, 129, 0.05);">
+            <div style="color: #6b7280; font-size: 0.9em; text-transform: uppercase;">Total Ingresos</div>
+            <div style="font-size: 1.8em; font-weight: bold; color: #10b981;">${{ total_in | round(2) }}</div>
+        </div>
+        <div class="dashboard-total-card"
+            style="padding: 16px; border-radius: 12px; border: 1px solid #ef4444; background: rgba(239, 68, 68, 0.05);">
+            <div style="color: #6b7280; font-size: 0.9em; text-transform: uppercase;">Total Egresos</div>
+            <div style="font-size: 1.8em; font-weight: bold; color: #ef4444;">${{ total_out | round(2) }}</div>
+        </div>
+        <div class="dashboard-total-card"
+            style="padding: 16px; border-radius: 12px; border: 1px solid var(--primary-color); background: var(--bg-card); display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <div style="color: var(--primary-color); font-size: 0.9em; text-transform: uppercase; font-weight: bold;">
+                SALDO EN CAJA</div>
+            <div style="font-size: 2.2em; font-weight: 900; color: var(--primary-color);">
+                ${{ balance | round(2) }}
+            </div>
+        </div>
+    </div>
+
+    <h3>Libro de Movimientos (Últimos 100)</h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha (UTC)</th>
+                    <th>Concepto</th>
+                    <th>Referencia</th>
+                    <th>Usuario</th>
+                    <th style="text-align: right;">Ingreso (+)</th>
+                    <th style="text-align: right;">Egreso (-)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mov in movements %}
+                <tr>
+                    <td>{{ mov.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>{{ mov.concept }}</td>
+                    <td style="font-size: 0.8em; color: #666;">
+                        {% if mov.reference_type %}
+                        {{ mov.reference_type|title }} #{{ mov.reference_id }}
+                        {% else %}
+                        Manual
+                        {% endif %}
+                    </td>
+                    <td>{{ mov.user_id }}</td>
+                    <td style="text-align: right; color: #10b981; font-weight: bold;">
+                        {% if mov.movement_type == 'in' and mov.amount > 0 %}
+                        ${{ mov.amount | round(2) }}
+                        {% endif %}
+                    </td>
+                    <td style="text-align: right; color: #ef4444; font-weight: bold;">
+                        {% if mov.movement_type == 'out' or mov.amount < 0 %} ${{ (mov.amount|abs) | round(2) }} {%
+                            endif %} </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 32px;">No hay movimientos recientes</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal -->
+<div id="cash-modal"
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 100; justify-content: center; align-items: center;">
+    <div class="glass-card" style="width: 95%; max-width: 450px; background: white;">
+        <h3 id="modal-title" style="margin-bottom: 24px;">Registrar Movimiento</h3>
+        <form id="cash-form" action="/api/cash/movement" method="post">
+            <input type="hidden" id="c-type" name="movement_type">
+
+            <label style="display: block; margin-bottom: 8px; font-weight: 500;">Monto ($)</label>
+            <input type="number" step="0.01" id="c-amount" name="amount" required placeholder="0.00"
+                style="margin-bottom: 16px; font-size: 1.5rem; padding: 12px; width: 100%;">
+
+            <label style="display: block; margin-bottom: 8px; font-weight: 500;">Concepto</label>
+            <input type="text" id="c-concept" name="concept" required placeholder="Ej. Pago Flete, Cambio Inicial..."
+                style="margin-bottom: 24px; width: 100%;">
+
+            <div style="text-align: right; display: flex; justify-content: flex-end; gap: 12px;">
+                <button type="button" onclick="closeModal()" class="btn"
+                    style="background: white; color: #666; border: 1px solid #e5e7eb; padding: 10px 24px;">Cancelar</button>
+                <button type="submit" id="c-submit" class="btn"
+                    style="padding: 10px 32px; font-size: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                    Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openModal(type) {
+        document.getElementById('cash-modal').style.display = 'flex';
+        document.getElementById('cash-form').reset();
+        document.getElementById('c-type').value = type;
+
+        const title = document.getElementById('modal-title');
+        const submitBtn = document.getElementById('c-submit');
+
+        if (type === 'in') {
+            title.innerText = '💰 Nuevo Ingreso Manual';
+            submitBtn.style.backgroundColor = '#10b981';
+        } else {
+            title.innerText = '💸 Nuevo Egreso Manual';
+            submitBtn.style.backgroundColor = '#ef4444';
+        }
+    }
+
+    function closeModal() { document.getElementById('cash-modal').style.display = 'none'; }
+</script>
+<style>
+    @media print {
+        body * {
+            visibility: hidden;
+        }
+
+        .glass-card,
+        .table-container,
+        .table-container * {
+            visibility: visible;
+        }
+
+        .glass-card {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            box-shadow: none;
+        }
+
+        .btn {
+            display: none !important;
+        }
+    }
+</style>
+{% endblock %}
