@@ -178,6 +178,25 @@
                 rápida JSON</a>
         </div>
 
+        <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+            <h4 style="margin-bottom: 12px; color: #ef4444;">⚠️ Restaurar Sistema</h4>
+            <p style="color: #64748b; font-size: 0.9em; margin-bottom: 16px;">
+                Cargue un archivo (.json o .json.gz) generado por la opción "Generar backup".
+                <strong>Esta acción borrará los datos actuales y restaurará el sistema al punto del backup.</strong>
+            </p>
+            <form onsubmit="restoreSystem(event)" style="display:flex; gap: 12px; align-items:flex-end;">
+                <div style="flex-grow: 1;">
+                    <label style="display:block; font-size: 0.8em; margin-bottom: 4px; font-weight: bold;">Archivo de
+                        Backup</label>
+                    <input type="file" name="file" accept=".json,.json.gz,application/json,application/gzip" required
+                        style="padding: 10px; border: 1px solid #ccc; width: 100%; border-radius: 8px;">
+                </div>
+                <button type="submit" class="btn" style="background-color: #ef4444; height: 42px;">Restaurar</button>
+            </form>
+        </div>
+
+        <h4 style="margin-top: 32px; margin-bottom: 12px;">Historial Local de Backups</h4>
+
         <div id="backup-list"
             style="font-size: 0.9rem; color:#334155; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px;">
             Cargando backups...
@@ -444,6 +463,36 @@
 
         alert(`Backup generado: ${payload.filename}`);
         loadBackupFiles();
+    }
+
+    async function restoreSystem(e) {
+        e.preventDefault();
+
+        if (!confirm("⚠️ ADVERTENCIA CRÍTICA ⚠️\n\nEstá a punto de RESTAURAR la base de datos desde un archivo. ¡Todo el progreso actual que no esté en este backup SE PERDERÁ! (Ventas de hoy, nuevos productos, etc).\n\n¿Está 100% seguro de que desea continuar?")) return;
+
+        const data = new FormData(e.target);
+        const btn = e.target.querySelector('button');
+        const originalText = btn.innerText;
+        btn.disabled = true;
+        btn.innerText = "Restaurando (Puede tardar)...";
+
+        try {
+            const res = await fetch('/api/admin/restore', { method: 'POST', body: data });
+            const result = await res.json();
+
+            if (res.ok && result.status === "success") {
+                alert("✅ Sistema Restaurado con Éxito. La página se recargará ahora.");
+                window.location.reload();
+            } else {
+                alert(`❌ Error en la restauración: ${result.error || result.detail || 'Archivo inválido o corrupto.'}`);
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }
+        } catch (err) {
+            alert("❌ Error crítico de conexión durante la restauración.");
+            btn.disabled = false;
+            btn.innerText = originalText;
+        }
     }
 </script>
 
