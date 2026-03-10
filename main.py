@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Depends, HTTPException, Request, Form, status, Response, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, StreamingResponse
+from fastapi import FastAPI, Depends, HTTPException, Request, Form, status, UploadFile, File
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,17 +14,18 @@ import io
 import shutil
 import uuid
 import json
-import gzip
+import secrets
 
 import pandas as pd
 
-from database.session import create_db_and_tables, get_session
+from database.session import create_db_and_tables, get_session, engine
 from database.models import Product, Sale, User, Settings, Client, Payment, Tax, SaleItem, Supplier, Purchase, PurchaseItem, CashMovement
 from database.seed_data import seed_products
 from services.stock_service import StockService
 from services.auth_service import AuthService
-from services.settings_service import SettingsService
-from services.database_backup_service import create_backup_file, list_local_backups, get_local_backup_path
+from routers.admin import router as admin_router
+from routers.picking import router as picking_router
+from web.dependencies import get_current_user, get_settings, get_tenant, require_auth
 import barcode
 from barcode.writer import ImageWriter
 
@@ -34,76 +35,31 @@ templates = Jinja2Templates(directory="templates")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # On startup
     create_db_and_tables()
-    
-    # Run Auto-Migrations (Fixes "UndefinedColumn" errors on schema updates)
-    session = next(get_session())
-    from sqlalchemy import text
-    
-    migration_statements = [
-        # Multi-tenant migrations
-        "CREATE TABLE IF NOT EXISTS tenant (id INTEGER PRIMARY KEY, name TEXT, subdomain TEXT, is_active BOOLEAN, created_at TIMESTAMP);",
-        "ALTER TABLE settings ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
-        "ALTER TABLE \"user\" ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
-        "ALTER TABLE product ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
-        "ALTER TABLE client ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
-        "ALTER TABLE sale ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
-        "ALTER TABLE payment ADD COLUMN tenant_id INTEGER REFERENCES tenant(id);",
-        
-        # Existing migrations
-        "ALTER TABLE settings ADD COLUMN tax_rate FLOAT DEFAULT 0.0;",
-        "ALTER TABLE settings ADD COLUMN label_width_mm INTEGER DEFAULT 60;",
-        "ALTER TABLE settings ADD COLUMN label_height_mm INTEGER DEFAULT 40;",
-        "ALTER TABLE product ADD COLUMN category TEXT;",
-        "ALTER TABLE product ADD COLUMN item_number TEXT;",
-        "ALTER TABLE product ADD COLUMN cant_bulto INTEGER;",
-        "ALTER TABLE product ADD COLUMN numeracion TEXT;",
-        "ALTER TABLE product ADD COLUMN price_retail FLOAT;",
-        "ALTER TABLE product ADD COLUMN price_bulk FLOAT;",
-        "ALTER TABLE client ADD COLUMN razon_social TEXT;",
-        "ALTER TABLE client ADD COLUMN cuit TEXT;",
-        "ALTER TABLE client ADD COLUMN iva_category TEXT;",
-        "ALTER TABLE client ADD COLUMN transport_name TEXT;",
-        "ALTER TABLE client ADD COLUMN transport_address TEXT;",
-        "ALTER TABLE sale ADD COLUMN amount_paid FLOAT DEFAULT 0;",
-        "ALTER TABLE sale ADD COLUMN payment_status TEXT DEFAULT 'paid';",
-        "ALTER TABLE sale ADD COLUMN is_closed BOOLEAN DEFAULT FALSE;"
-    ]
-    
-    print("🚀 [DEPLOY v2.6.0] Checking/Running Schema Migrations...")
-    for stmt in migration_statements:
+    with Session(engine) as session:
         try:
-            session.exec(text(stmt))
-            session.commit()
-            print(f"✅ Executed: {stmt}")
+            AuthService.create_default_user_and_settings(session)
         except Exception as e:
+            print(f"WARNING: Seed Error (non-fatal): {e}")
             session.rollback()
-            err_str = str(e).lower()
-            # Ignore "column already exists" errors
-            if "already exists" in err_str or "duplicate column" in err_str:
-                 print(f"ℹ️ Skipped (already exists): {stmt}")
-            else:
-                # Log actual errors that might need attention
-                print(f"⚠️ Migration Error on '{stmt}': {e}")
 
-    # Seed Data
-    try:
-        AuthService.create_default_user_and_settings(session)
-    except Exception as e:
-        print(f"⚠️ Seed Error (non-fatal): {e}")
-        session.rollback()
-    seed_products(session)
+        seed_products(session)
     yield
 
 app = FastAPI(title="NexPos System", lifespan=lifespan)
 
 # CORS
+def _get_cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ORIGINS", "http://localhost,http://127.0.0.1")
+    origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    return origins or ["http://localhost", "http://127.0.0.1"]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
+    allow_origins=_get_cors_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -115,43 +71,16 @@ def health_check():
 
 # Mount Static Files
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# --- Dependencies ---
-
-def get_current_user(request: Request, session: Session = Depends(get_session)) -> Optional[User]:
-    user_id = request.session.get("user_id")
-    if not user_id:
-        return None
-    user = session.get(User, user_id)
-    if user and not user.tenant_id:
-        # Fix legacy users without tenant
-        # Assign to the first tenant (default) to prevent "No tenant associated" error
-        from database.models import Tenant
-        tenant = session.exec(select(Tenant)).first()
-        if tenant:
-            user.tenant_id = tenant.id
-            session.add(user)
-            session.commit()
-            session.refresh(user)
-    return user
-
-def require_auth(request: Request, user: Optional[User] = Depends(get_current_user)):
-    if not user:
-        raise HTTPException(status_code=status.HTTP_302_FOUND, headers={"Location": "/login"})
-    return user
-
-def get_tenant(request: Request, user: User = Depends(get_current_user)) -> int:
-    if not user or not user.tenant_id:
-        raise HTTPException(status_code=403, detail="No tenant associated")
-    return user.tenant_id
-
-def get_settings(session: Session = Depends(get_session)) -> Settings:
-    return SettingsService.get_or_create_settings(session)
+app.include_router(admin_router)
+app.include_router(picking_router)
 
 # --- Auth Routes ---
 
 from starlette.middleware.sessions import SessionMiddleware
-app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY", "super-secret-nexpos-key-change-me"))
+session_secret = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
+if not os.getenv("SECRET_KEY"):
+    print("WARNING: SECRET_KEY not set. Using ephemeral session secret for this process.")
+app.add_middleware(SessionMiddleware, secret_key=session_secret)
 
 @app.get("/login", response_class=HTMLResponse)
 @app.head("/login")
@@ -353,13 +282,13 @@ def trigger_backup(request: Request, user: User = Depends(require_auth), setting
     
     # Generate full JSON system snapshot BEFORE we wipe today's sales
     try:
-        json_backup_result = create_backup_file(session)
+        json_backup_result = create_backup_file(session, tenant_id=tenant_id)
         print(f"INFO: Auto JSON backup generated during Cierre de Caja: {json_backup_result['filename']}")
     except Exception as e:
         print(f"ERROR: Failed to generate JSON backup during Cierre de Caja: {e}")
     
     # Run legacy backup to Google Sheets
-    result = perform_backup(session)
+    result = perform_backup(session, tenant_id=tenant_id)
     
     # If backup successful, mark today's sales as closed to clear the daily screens
     if result["status"] == "success":
@@ -415,77 +344,6 @@ def trigger_backup(request: Request, user: User = Depends(require_auth), setting
 # --- API Endpoints ---
 
 # --- Products ---
-@app.get("/api/products/export")
-def export_products_api(session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
-
-
-    
-    products = session.exec(select(Product).where(Product.tenant_id == tenant_id)).all()
-    
-    data = []
-    for p in products:
-        data.append({
-            "ID": p.id,
-            "Name": p.name,
-            "Category": p.category,
-            "ItemNumber": p.item_number,
-            "Barcode": p.barcode,
-            "Price": p.price,
-            "Stock": p.stock_quantity,
-            "Description": p.description,
-            "Numeracion": p.numeracion,
-            "CantBulto": p.cant_bulto,
-            "PriceBulk": p.price_bulk,
-            "PriceRetail": p.price_retail
-        })
-        
-    df = pd.DataFrame(data)
-    
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False)
-    output.seek(0)
-    
-    headers = {
-        'Content-Disposition': 'attachment; filename="productos_export.xlsx"'
-    }
-    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-@app.get("/api/clients/export")
-def export_clients_api(session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
-
-
-    
-    clients = session.exec(select(Client).where(Client.tenant_id == tenant_id)).all()
-    
-    data = []
-    for c in clients:
-        data.append({
-            "ID": c.id,
-            "Name": c.name,
-            "RazonSocial": c.razon_social,
-            "CUIT": c.cuit,
-            "Phone": c.phone,
-            "Email": c.email,
-            "Address": c.address,
-            "IVACategory": c.iva_category,
-            "CreditLimit": c.credit_limit,
-            "TransportName": c.transport_name,
-            "TransportAddress": c.transport_address
-        })
-        
-    df = pd.DataFrame(data)
-    
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False)
-    output.seek(0)
-    
-    headers = {
-        'Content-Disposition': 'attachment; filename="clientes_export.xlsx"'
-    }
-    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
 @app.get("/api/products")
 def get_products_api(session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
     return session.exec(select(Product).where(Product.tenant_id == tenant_id)).all()
@@ -1000,91 +858,8 @@ def migrate_legacy_data(session: Session = Depends(get_session), user: User = De
     # Just returning simple results for now to avoid huge file context duplication in this replace
     return {"status": "omitted_for_brevity", "message": "Use previous logic or fix implementation"}
 
-# --- Schema Migration Endpoint (V5) ---
-@app.get("/migrate-schema")
-def migrate_schema_v5(session: Session = Depends(get_session), user: User = Depends(require_auth)):
-    if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Unauthorized")
-    
-    from sqlalchemy import text
-    from database.session import create_db_and_tables
-    
-    # 1. Create new tables (like Tax)
-    create_db_and_tables() 
-
-    # 2. Add New Columns
-    alter_statements = [
-        "ALTER TABLE product ADD COLUMN category TEXT;",
-        "ALTER TABLE product ADD COLUMN item_number TEXT;",
-        "ALTER TABLE product ADD COLUMN cant_bulto INTEGER;",
-        "ALTER TABLE product ADD COLUMN numeracion TEXT;",
-        "ALTER TABLE product ADD COLUMN price_retail FLOAT;", # Precio Especial/User Def
-        "ALTER TABLE product ADD COLUMN price_bulk FLOAT;", # Precio Bulto
-        "ALTER TABLE client ADD COLUMN razon_social TEXT;",
-        "ALTER TABLE client ADD COLUMN cuit TEXT;",
-        "ALTER TABLE client ADD COLUMN iva_category TEXT;",
-        "ALTER TABLE client ADD COLUMN transport_name TEXT;",
-        "ALTER TABLE client ADD COLUMN transport_address TEXT;",
-        "ALTER TABLE sale ADD COLUMN amount_paid FLOAT DEFAULT 0;",
-        "ALTER TABLE sale ADD COLUMN payment_status TEXT DEFAULT 'paid';",
-        "ALTER TABLE settings ADD COLUMN label_width_mm INTEGER DEFAULT 60;",
-        "ALTER TABLE settings ADD COLUMN label_height_mm INTEGER DEFAULT 40;"
-    ]
-    
-    results = []
-    for stmt in alter_statements:
-        try:
-            session.exec(text(stmt))
-            session.commit()
-            results.append(f"Success: {stmt}")
-        except Exception as e:
-            results.append(f"Skipped (likely exists): {stmt} - {str(e)[:50]}")
-
-    # 3. Seed new products (Batch 1 from User Request)
-    # Check if they exist first to avoid duplicates
-    new_products_data = [
-        {"item_number": "7111", "name": "Gomon Pin Negro", "price": 7500.0, "numeracion": "35-40", "cant_bulto": 12, "category": "Verano", "stock_quantity": 100},
-        {"item_number": "7110", "name": "Articulo 7110", "price": 13000.0, "numeracion": "35-40", "cant_bulto": 12, "category": "Verano", "stock_quantity": 100},
-        {"item_number": "7098", "name": "Gomon NO Pin", "price": 6000.0, "numeracion": "35-40", "cant_bulto": 12, "category": "Verano", "stock_quantity": 100},
-        {"item_number": "7083", "name": "1/2 Alto", "price": 8500.0, "numeracion": "35-40", "cant_bulto": 12, "category": "Verano", "stock_quantity": 100},
-        {"item_number": "7091", "name": "Articulo 7091", "price": 7200.0, "numeracion": "35/6-39/0", "cant_bulto": 12, "category": "Verano", "stock_quantity": 100}
-    ]
-    
-    products_added = 0
-    from database.models import Product
-    
-    for p_data in new_products_data:
-        existing = session.exec(select(Product).where(Product.item_number == p_data['item_number'])).first()
-        if not existing:
-            # We need a barcode. Use item_number if valid.
-    
-            barcode_val = p_data['item_number'] if len(p_data['item_number']) >= 4 else str(uuid.uuid4())[:12]
-            
-            # Assume default tenant 1 for migration
-            new_prod = Product(tenant_id=1, **p_data, barcode=barcode_val)
-            session.add(new_prod)
-            products_added += 1
-            
-    if products_added > 0:
-        session.commit()
-        results.append(f"Seeded {products_added} new products.")
-
-    return {"status": "success", "results": results}
-
-
-# --- Settings & Admin (v2.4) ---
-
-@app.get("/settings", response_class=HTMLResponse)
-def settings_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings)):
-    SettingsService.ensure_admin(user)
-    return templates.TemplateResponse("settings.html", {"request": request, "active_page": "settings", "user": user, "settings": settings})
-
-@app.get("/admin")
-def admin_redirect():
-    # Fix for 500 error on legacy /admin
-    return RedirectResponse("/settings")
-
 # --- Import / Export (Excel) ---
+
 @app.get("/api/templates/download/{type}")
 def download_import_template(type: str, user: User = Depends(require_auth)):
     if user.role != "admin": raise HTTPException(403)
@@ -1259,7 +1034,7 @@ async def import_products(file: UploadFile = File(...), session: Session = Depen
     return {"added": added, "updated": updated, "errors": errors}
 
 @app.post("/api/import/clients")
-async def import_clients(file: UploadFile = File(...), session: Session = Depends(get_session), user: User = Depends(require_auth)):
+async def import_clients(file: UploadFile = File(...), session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
     if user.role != "admin": raise HTTPException(403)
     
 
@@ -1277,7 +1052,7 @@ async def import_clients(file: UploadFile = File(...), session: Session = Depend
             if not name or pd.isna(name): continue
             
             # Check duplicate by name?
-            existing = session.exec(select(Client).where(Client.name == name)).first()
+            existing = session.exec(select(Client).where(Client.name == name, Client.tenant_id == tenant_id)).first()
             
             # Helper
             def get_val(col, default=None):
@@ -1312,6 +1087,7 @@ async def import_clients(file: UploadFile = File(...), session: Session = Depend
                 # skipping "added" increment, maybe tack "updated" count later? For now just don't create dupes.
             else:
                 client = Client(
+                    tenant_id=tenant_id,
                     name=name,
                     phone=phone,
                     email=email,
@@ -1331,70 +1107,6 @@ async def import_clients(file: UploadFile = File(...), session: Session = Depend
     session.commit()
     return {"added": added, "errors": errors}
 
-# --- Backup ---
-@app.get("/api/backup")
-def download_backup(user: User = Depends(require_auth), session: Session = Depends(get_session)):
-    if user.role != "admin": raise HTTPException(403)
-    
-    import json
-    from datetime import datetime
-    
-    # Simple JSON dump of main tables
-    data = {
-        "generated_at": datetime.now().isoformat(),
-        "products": [p.model_dump() for p in session.exec(select(Product)).all()],
-        "clients": [c.model_dump() for c in session.exec(select(Client)).all()],
-        "sales": [s.model_dump() for s in session.exec(select(Sale)).all()]
-    }
-    
-    json_str = json.dumps(data, indent=2, default=str)
-    
-    from fastapi.responses import Response
-    return Response(
-        content=json_str,
-        media_type="application/json",
-        headers={"Content-Disposition": f"attachment; filename=backup_{datetime.now().strftime('%Y%m%d')}.json"}
-    )
-
-# --- Users (Refined) ---
-@app.get("/api/users")
-def get_users(session: Session = Depends(get_session), user: User = Depends(require_auth)):
-    if user.role != "admin": raise HTTPException(403)
-    return session.exec(select(User)).all()
-
-@app.post("/api/users")
-def create_user(
-    username: str = Form(...), 
-    password: str = Form(...), 
-    role: str = Form(...), 
-    full_name: Optional[str] = Form(None),
-    session: Session = Depends(get_session), 
-    user: User = Depends(require_auth)
-):
-    if user.role != "admin": raise HTTPException(403)
-    
-    # Use AuthService for consistent hashing
-    from services.auth_service import AuthService
-    hashed = AuthService.get_password_hash(password)
-    
-    new_user = User(username=username, password_hash=hashed, role=role, full_name=full_name)
-    session.add(new_user)
-    try:
-        session.commit()
-    except:
-        raise HTTPException(400, "Username already exists")
-    return new_user
-
-@app.delete("/api/users/{id}")
-def delete_user(id: int, session: Session = Depends(get_session), user: User = Depends(require_auth)):
-    if user.role != "admin": raise HTTPException(403)
-    if user.id == id: raise HTTPException(400, "Cannot delete yourself")
-    target = session.get(User, id)
-    if target:
-        session.delete(target)
-        session.commit()
-    return {"ok": True}
-
 class BulkPriceUpdate(BaseModel):
     update_type: str  # "all" or "list"
     percentage: float # 10.0 for 10%, -5.0 for discount
@@ -1404,17 +1116,18 @@ class BulkPriceUpdate(BaseModel):
 def bulk_update_price(
     data: BulkPriceUpdate,
     session: Session = Depends(get_session),
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant)
 ):
     if user.role != "admin": raise HTTPException(403, "Solo administradores")
     
     products = []
     if data.update_type == "all":
-        products = session.exec(select(Product)).all()
+        products = session.exec(select(Product).where(Product.tenant_id == tenant_id)).all()
     elif data.update_type == "list":
         if not data.product_ids or len(data.product_ids) == 0:
             raise HTTPException(400, "No se seleccionaron productos")
-        products = session.exec(select(Product).where(Product.id.in_(data.product_ids))).all()
+        products = session.exec(select(Product).where(Product.id.in_(data.product_ids), Product.tenant_id == tenant_id)).all()
     else:
         raise HTTPException(400, "Tipo de actualización inválido")
         
@@ -1452,132 +1165,6 @@ def delete_tax(id: int, session: Session = Depends(get_session), user: User = De
         session.delete(tax)
         session.commit()
     return {"ok": True}
-
-# --- Picking (v2.5 Mobile) ---
-
-@app.get("/picking", response_class=HTMLResponse)
-def picking_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings)):
-    return templates.TemplateResponse("picking.html", {"request": request, "user": user, "settings": settings})
-
-@app.post("/api/picking/entry")
-def picking_entry(
-    barcode: str = Form(...),
-    qty: int = Form(1),
-    session: Session = Depends(get_session),
-    user: User = Depends(require_auth)
-):
-    search_term = barcode.strip()
-    # Try exact barcode match first
-    product = session.exec(select(Product).where(Product.barcode == search_term)).first()
-    
-    # Fallback: Try match by item_number if not found
-    if not product:
-        product = session.exec(select(Product).where(Product.item_number == search_term)).first()
-    
-    # Fallback: Fuzzy match (if scanned is EAN but db has item_number)
-    # Check if item_number matches prefix of scanned code (length 3, 4, 5)
-    if not product and len(search_term) >= 4:
-         prefixes = [search_term[:i] for i in range(3, min(len(search_term), 6))]
-         candidates = session.exec(select(Product).where(Product.item_number.in_(prefixes))).all()
-         # Find longest matching prefix
-         for p in sorted(candidates, key=lambda x: len(x.item_number or ""), reverse=True):
-             if p.item_number and search_term.startswith(p.item_number):
-                 product = p
-                 break
-        
-    if not product:
-        raise HTTPException(404, f"Producto no encontrado: {search_term}")
-    
-    product.stock_quantity += qty
-    session.add(product)
-    session.commit()
-    session.refresh(product)
-    
-    return {"status": "ok", "product": {"name": product.name, "new_stock": product.stock_quantity}}
-
-class PickingItem(BaseModel):
-    barcode: str
-    qty: int
-
-class PickingExitRequest(BaseModel):
-    items: List[PickingItem]
-
-@app.post("/api/picking/exit")
-def picking_exit(
-    data: PickingExitRequest,
-    session: Session = Depends(get_session),
-    user: User = Depends(require_auth)
-):
-    # Reuse stock logic but simpler
-    # Validate items
-    products_map = {}
-    total_amount = 0.0
-    
-    # 1. Validate and fetch products
-    for item in data.items:
-        search_term = item.barcode.strip()
-        prod = session.exec(select(Product).where(Product.barcode == search_term)).first()
-        
-        # Fallback to item_number
-        if not prod:
-            prod = session.exec(select(Product).where(Product.item_number == search_term)).first()
-            
-        # Fallback Fuzzy
-        if not prod and len(search_term) >= 4:
-             prefixes = [search_term[:i] for i in range(3, min(len(search_term), 6))]
-             candidates = session.exec(select(Product).where(Product.item_number.in_(prefixes))).all()
-             for p in sorted(candidates, key=lambda x: len(x.item_number or ""), reverse=True):
-                 if p.item_number and search_term.startswith(p.item_number):
-                     prod = p
-                     break
-                     
-        if not prod:
-            raise HTTPException(404, f"Producto no encontrado: {item.barcode}")
-        
-        # Check stock (optional in picking? usually yes)
-        if prod.stock_quantity < item.qty:
-            pass # Allow negative stock for now to avoid blocking sales? Or strict? 
-            # User didn't specify, but strict is safer. Let's keep strict but maybe log warning.
-            # actually better to allow it for now if physical stock exists but system doesn't know.
-            # warn? For now let's raise error to be consistent with existing logic.
-            # raise HTTPException(400, f"Stock insuficente para: {prod.name}") 
-            # COMMENTED OUT STRICT CHECK based on common "just let me sell" requests.
-            
-        # Use first found product for this barcode/item_number
-        products_map[item.barcode] = prod
-        total_amount += prod.price * item.qty
-
-    # 2. Create Sale
-    new_sale = Sale(client_id=None, user_id=user.id, total_amount=total_amount)
-    session.add(new_sale)
-    session.commit()
-    session.refresh(new_sale)
-    
-    # 3. Create items and deduct stock
-    for item in data.items:
-        prod = products_map[item.barcode]
-        
-        sale_item = SaleItem(
-            sale_id=new_sale.id,
-            product_id=prod.id,
-            product_name=prod.name,
-            quantity=item.qty,
-            unit_price=prod.price,
-            total=prod.price * item.qty
-        )
-        session.add(sale_item)
-        
-        # Deduct Stock
-        prod.stock_quantity -= item.qty
-        session.add(prod)
-        
-    session.commit()
-    
-    return {
-        "status": "ok", 
-        "sale_id": new_sale.id,
-        "print_url": f"/sales/{new_sale.id}/remito" # Using existing remito URL as "Invoice"
-    }
 
 # --- Test Data Seeder (Temporary) ---
 @app.get("/api/test/seed_products")
@@ -1617,11 +1204,12 @@ def seed_test_products(session: Session = Depends(get_session), user: User = Dep
 @app.post("/print/labels/generate")
 def print_labels_v2(
     request: Request,
-    selected_items: str = Form(...), # JSON string of IDs
-    layout_type: str = Form(...), # 'standard', 'exhibition', 'list'
-    hide_price: Optional[str] = Form(None), # Changed to str to capture "true"/"on"/None
+    selected_items: str = Form(...),
+    layout_type: str = Form(...),
+    hide_price: Optional[str] = Form(None),
     settings: Settings = Depends(get_settings),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    tenant_id: int = Depends(get_tenant)
 ):
     # Manual conversion because checkbox default handling can be tricky
     should_hide_price = False
@@ -1635,7 +1223,7 @@ def print_labels_v2(
     except:
         raise HTTPException(400, "Invalid JSON selection")
         
-    products = session.exec(select(Product).where(col(Product.id).in_(item_ids))).all()
+    products = session.exec(select(Product).where(col(Product.id).in_(item_ids), Product.tenant_id == tenant_id)).all()
     
     # Prepare data for template
     labels_data = []
@@ -1706,390 +1294,3 @@ def print_labels_v2(
             "h": settings.label_height_mm,
             "hide_price": should_hide_price
         })
-# --- Settings API ---
-@app.post("/api/settings")
-async def update_settings(
-    request: Request,
-    company_name: Optional[str] = Form(None),
-    printer_name: Optional[str] = Form(None),
-    label_width_mm: Optional[int] = Form(None),
-    label_height_mm: Optional[int] = Form(None),
-    logo_file: Optional[UploadFile] = File(None),
-    session: Session = Depends(get_session),
-    user: User = Depends(require_auth)
-):
-    SettingsService.ensure_admin(user)
-    form_data = await request.form()
-    SettingsService.validate_supported_fields(form_data.keys())
-
-    settings = SettingsService.get_or_create_settings(session)
-    SettingsService.apply_updates(
-        session=session,
-        settings=settings,
-        company_name=company_name,
-        printer_name=printer_name,
-        label_width_mm=label_width_mm,
-        label_height_mm=label_height_mm,
-        logo_file=logo_file,
-    )
-    return {"status": "success"}
-
-@app.get("/api/admin/reset-inventory-from-excel")
-def reset_inventory_from_excel(session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
-    if user.role != "admin": raise HTTPException(403)
-    
-
-    import os
-    import io
-    from sqlmodel import text, delete
-    from database.models import Product  # Ensure Product is imported
-
-    # Check for file
-    file_path = "productos.xlsx"
-    if not os.path.exists(file_path):
-        return {"error": "File 'productos.xlsx' not found on server root"}
-        
-    try:
-        # 1. Clear Products for this tenant only
-        # Use ORM delete to ensure constraints are handled if any, or raw SQL filtered by tenant_id
-        session.exec(delete(Product).where(Product.tenant_id == tenant_id))
-        
-        # 2. Read Excel
-        df = pd.read_excel(file_path)
-        
-        added = 0
-        errors = []
-        
-        # Safe Helpers
-        def get_int(val, default=0):
-            if pd.isna(val): return default
-            try: return int(float(val))
-            except: return default
-
-        def get_float(val, default=0.0):
-            if pd.isna(val): return default
-            try: return float(val)
-            except: return default
-        
-        def get_str(col):
-            val = row.get(col)
-            if pd.isna(val): return None
-            s = str(val).strip()
-            return s if s.lower() != 'nan' else None
-
-        for index, row in df.iterrows():
-            try:
-                name = str(row.get('Name', '')).strip()
-                # Skip invalid names
-                if not name or name.lower() == 'nan' or pd.isna(name): continue
-                
-                barcode = str(row.get('Barcode', '')).strip()
-                if pd.isna(barcode) or barcode.lower() == 'nan': 
-                     barcode = None
-                
-                should_generate = False
-                if not barcode:
-                    should_generate = True
-            
-                    barcode = f"TMP-{uuid.uuid4().hex[:8]}"
-
-                category = get_str('Category')
-                description = get_str('Description')
-                numeracion = get_str('Numeracion')
-                item_number = get_str('ItemNumber')
-                
-                cant_bulto_raw = row.get('CantBulto')
-                cant_bulto = get_int(cant_bulto_raw, None) if not pd.isna(cant_bulto_raw) else None
-                
-                stock = get_int(row.get('Stock'), 0)
-                price = get_float(row.get('Price'), 0.0)
-                
-                price_retail_raw = row.get('PriceRetail')
-                price_retail = get_float(price_retail_raw, None) if not pd.isna(price_retail_raw) else None
-
-                price_bulk_raw = row.get('PriceBulk')
-                price_bulk = get_float(price_bulk_raw, None) if not pd.isna(price_bulk_raw) else None
-                
-                # Auto-calculate Price Bulk if missing (User Request: Unit Price * 12)
-                if price_bulk is None and price is not None:
-                    price_bulk = price * 12
-
-                prod = Product(
-                    name=name,
-                    price=price,
-                    stock_quantity=stock,
-                    barcode=barcode,
-                    category=category,
-                    description=description,
-                    numeracion=numeracion,
-                    cant_bulto=cant_bulto,
-                    item_number=item_number,
-                    price_retail=price_retail,
-                    price_bulk=price_bulk
-                )
-                session.add(prod)
-                
-                if should_generate:
-                    session.flush()
-                    prod.barcode = str(prod.id).zfill(8)
-                    session.add(prod)
-                    
-                added += 1
-                
-            except Exception as e:
-                errors.append(f"Row {index}: {str(e)}")
-        
-        session.commit()
-        return {"status": "success", "message": f"Inventory Reset. Added {added} products.", "errors": errors}
-        
-    except Exception as e:
-        session.rollback()
-        return {"error": str(e)}
-
-@app.get("/api/admin/reset-clients-from-excel")
-def reset_clients_from_excel(session: Session = Depends(get_session), user: User = Depends(require_auth)):
-    if user.role != "admin": raise HTTPException(403)
-    
-
-    import os
-    from sqlmodel import text
-    from database.models import Client, Sale
-    
-    file_path = "clientes.xlsx"
-    if not os.path.exists(file_path):
-        return {"error": "File 'clientes.xlsx' not found on server root"}
-        
-    try:
-        # 1. Clear Clients (and their related Sales/Payments if we want a full reset?)
-        # For now, let's just clear Clients. If Sales exist linked to clients, this might fail or set to null.
-        # Assuming full reset context, we should probably clear sales too or at least unlink them.
-        # Let's keep it simple: Create clients. If names match existing, maybe skip or update?
-        # User asked to "load", implies maybe fresh start or append.
-        # Given "reset_inventory" was a wipe, let's assume wipe here too for consistency, BUT
-        # wiping clients might break sales history if we didn't wipe sales.
-        # Let's just UPSERT (Update if exists, Create if not) to be safe.
-        
-        xls = pd.ExcelFile(file_path)
-        sheet_names = xls.sheet_names
-        
-        added = 0
-        updated = 0
-        errors = []
-        
-        for sheet_name in sheet_names:
-            try:
-                # Use sheet name as Client Name
-                client_name = sheet_name.strip()
-                
-                # Try to read debt from sheet content if possible?
-                # Usually these sheets have a "Balance" or "Saldo" cell?
-                # Without specific format, we just create the client.
-                # User said "nececito cargar los clientes", implies existence.
-                
-                # Check for "Saldo" or "Restan" in the dataframe to capture initial debt?
-                # Let's try to find a header like "Saldo" or "Deuda"
-                df = pd.read_excel(file_path, sheet_name=sheet_name)
-                
-                initial_debt = 0.0
-                # Very naive heuristic: Look for column 'Restan' or 'Saldo' and take last value?
-                # Or just create the client for now.
-                # Let's try to look for 'Restan' column common in previous interactions.
-                if 'Restan' in df.columns:
-                     try:
-                         last_val = df['Restan'].iloc[-1]
-                         initial_debt = float(last_val) if not pd.isna(last_val) else 0.0
-                     except: pass
-                elif 'Saldo' in df.columns:
-                     try:
-                         last_val = df['Saldo'].iloc[-1]
-                         initial_debt = float(last_val) if not pd.isna(last_val) else 0.0
-                     except: pass
-
-                # Check if exists
-                existing = session.exec(select(Client).where(Client.name == client_name)).first()
-                
-                if existing:
-                    # Update?
-                    # existing.credit_limit = ...
-                    updated += 1
-                    client_id = existing.id
-                else:
-                    new_client = Client(name=client_name)
-                    session.add(new_client)
-                    session.commit()
-                    session.refresh(new_client)
-                    added += 1
-                    client_id = new_client.id
-                
-                # If we found debt, we should record it.
-                # How? Create a "Saldo Inicial" Sale?
-                if initial_debt > 0:
-                     # Check if we already have this initial date?
-                     # Simplified: Create a Sale with description "Saldo Inicial" (via note? Sale doesn't have note).
-                     # We can just create a Sale with total_amout = debt and status 'pending'.
-                     # But we don't want to duplicate it on every run.
-                     # Let's skip debt import for now unless explicitly requested to avoid duplication mess.
-                     # Or check if client has 0 sales.
-                     has_sales = session.exec(select(Sale).where(Sale.client_id == client_id)).first()
-                     if not has_sales:
-                         from datetime import datetime
-                         initial_sale = Sale(
-                             client_id=client_id,
-                             user_id=user.id,
-                             total_amount=initial_debt,
-                             amount_paid=0,
-                             payment_status="pending",
-                             timestamp=datetime.now(),
-                             payment_method="account" # Cuenta Corriente
-                         )
-                         session.add(initial_sale)
-                         session.commit()
-
-            except Exception as e:
-                errors.append(f"Sheet {sheet_name}: {str(e)}")
-                
-        return {"status": "success", "added": added, "updated": updated, "sheets_processed": len(sheet_names), "errors": errors}
-        
-    except Exception as e:
-        session.rollback()
-        return {"error": str(e)}
-
-# --- Backup / Restore System ---
-
-@app.get("/api/admin/backup")
-def create_system_backup(session: Session = Depends(get_session), user: User = Depends(require_auth)):
-    if user.role != "admin": raise HTTPException(403)
-    
-    from datetime import datetime
-    import json
-    
-    # 1. Fetch All Data
-    try:
-        data = {
-            "version": "1.0",
-            "timestamp": datetime.now().isoformat(),
-            "products": [p.model_dump() for p in session.exec(select(Product)).all()],
-            "clients": [c.model_dump() for c in session.exec(select(Client)).all()],
-            "users": [u.model_dump() for u in session.exec(select(User)).all()],
-            "settings": [s.model_dump() for s in session.exec(select(Settings)).all()],
-            "sales": [],
-            "sale_items": [],
-            "payments": [] 
-        }
-        
-        # Sales & Items needs care
-        sales = session.exec(select(Sale)).all()
-        for s in sales:
-            s_dict = s.model_dump()
-            # method_dump might exclude relationships or include them depending on config
-            # We want raw fields.
-            if s.timestamp: s_dict['timestamp'] = s.timestamp.isoformat()
-            data["sales"].append(s_dict)
-            
-        items = session.exec(select(SaleItem)).all()
-        for i in items:
-            data["sale_items"].append(i.model_dump())
-
-        payments = session.exec(select(Payment)).all()
-        for p in payments:
-            p_dict = p.model_dump()
-            if p.date: p_dict['date'] = p.date.isoformat()
-            data["payments"].append(p_dict)
-
-        return data
-        
-    except Exception as e:
-        return {"error": f"Backup failed: {str(e)}"}
-
-@app.post("/api/admin/backups/create")
-def create_database_backup_file(session: Session = Depends(get_session), user: User = Depends(require_auth)):
-    if user.role != "admin": raise HTTPException(403)
-    return create_backup_file(session)
-
-
-@app.get("/api/admin/backups/list")
-def list_database_backup_files(user: User = Depends(require_auth)):
-    if user.role != "admin": raise HTTPException(403)
-    return {"backups": list_local_backups()}
-
-
-@app.get("/api/admin/backups/download/{filename}")
-def download_database_backup_file(filename: str, user: User = Depends(require_auth)):
-    if user.role != "admin": raise HTTPException(403)
-    path = get_local_backup_path(filename)
-    return FileResponse(path=path, media_type="application/gzip", filename=path.name)
-
-
-@app.post("/api/admin/restore")
-async def restore_system_backup(file: UploadFile = File(...), session: Session = Depends(get_session), user: User = Depends(require_auth)):
-    if user.role != "admin": raise HTTPException(403)
-
-    # Helper: only keep fields that exist on the model to prevent injection
-    def _safe_fields(model_class, row: dict) -> dict:
-        valid_cols = {c.name for c in model_class.__table__.columns}
-        return {k: v for k, v in row.items() if k in valid_cols}
-
-    try:
-        raw_content = await file.read()
-        # Support both .json.gz and plain .json backups
-        if file.filename and file.filename.endswith(".gz"):
-            content = gzip.decompress(raw_content)
-        else:
-            content = raw_content
-        data = json.loads(content)
-
-        # VALIDATION
-        required_keys = {"products", "clients"}
-        if not required_keys.issubset(data.keys()):
-            raise HTTPException(400, detail="Invalid backup format: missing 'products' or 'clients'")
-
-        # 1. WIPE (FK-safe order: items -> sales -> payments -> products/clients -> users -> settings)
-        session.exec(text("DELETE FROM saleitem"))
-        session.exec(text("DELETE FROM sale"))
-        session.exec(text("DELETE FROM payment"))
-        session.exec(text("DELETE FROM product"))
-        session.exec(text("DELETE FROM client"))
-        session.exec(text('DELETE FROM "user"'))
-        session.exec(text("DELETE FROM settings"))
-        session.commit()
-
-        # 2. RESTORE (sanitise every row through _safe_fields)
-        for p in data.get("products", []):
-            session.add(Product(**_safe_fields(Product, p)))
-
-        for c in data.get("clients", []):
-            session.add(Client(**_safe_fields(Client, c)))
-
-        for u in data.get("users", []):
-            session.add(User(**_safe_fields(User, u)))
-
-        for s in data.get("settings", []):
-            session.add(Settings(**_safe_fields(Settings, s)))
-
-        session.flush()
-
-        # Sales (parse timestamps)
-        for s in data.get("sales", []):
-            if "timestamp" in s and isinstance(s["timestamp"], str):
-                s["timestamp"] = datetime.fromisoformat(s["timestamp"])
-            session.add(Sale(**_safe_fields(Sale, s)))
-
-        session.flush()
-
-        for i in data.get("sale_items", []):
-            session.add(SaleItem(**_safe_fields(SaleItem, i)))
-
-        for pay in data.get("payments", []):
-            if "date" in pay and isinstance(pay["date"], str):
-                pay["date"] = datetime.fromisoformat(pay["date"])
-            session.add(Payment(**_safe_fields(Payment, pay)))
-
-        session.commit()
-        return {"status": "success", "message": "System restored successfully"}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        session.rollback()
-        return {"error": f"Restore failed: {str(e)}"}
-

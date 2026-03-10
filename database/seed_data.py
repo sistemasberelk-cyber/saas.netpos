@@ -1,7 +1,12 @@
 from sqlmodel import Session, select
-from database.models import Product
+from database.models import Product, Tenant
+
 
 def seed_products(session: Session):
+    tenant = session.exec(select(Tenant).order_by(Tenant.id)).first()
+    if not tenant:
+        return
+
     products_data = [
         {
             "item_number": "7111",
@@ -10,8 +15,8 @@ def seed_products(session: Session):
             "price": 7500.0,
             "numeracion": "35 al 40",
             "cant_bulto": 12,
-            "stock_quantity": 120, # Default stock
-            "barcode": "711100000001", # generated dummy barcode
+            "stock_quantity": 120,
+            "barcode": "711100000001",
             "category": "Calzado"
         },
         {
@@ -115,14 +120,10 @@ def seed_products(session: Session):
     ]
 
     for p_data in products_data:
-        # Check if exists by item_number
-        statement = select(Product).where(Product.item_number == p_data["item_number"])
-        results = session.exec(statement)
-        product = results.first()
-
+        statement = select(Product).where(Product.item_number == p_data["item_number"], Product.tenant_id == tenant.id)
+        product = session.exec(statement).first()
         if not product:
-            new_product = Product(**p_data)
-            session.add(new_product)
+            session.add(Product(tenant_id=tenant.id, **p_data))
             print(f"Adding product: {p_data['name']}")
-    
+
     session.commit()

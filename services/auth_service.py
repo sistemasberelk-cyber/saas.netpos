@@ -2,10 +2,11 @@ from passlib.context import CryptContext
 from sqlmodel import Session, select
 from database.models import User, Settings, Tenant
 import os
-from datetime import datetime
+import secrets
 
 pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 print(f"INFO: Password Context Schemes: {pwd_context.schemes()}")
+
 
 class AuthService:
     @staticmethod
@@ -18,8 +19,7 @@ class AuthService:
 
     @staticmethod
     def create_default_user_and_settings(session: Session):
-        # 0. Create Default Tenant
-        tenant = session.exec(select(Tenant)).first()
+        tenant = session.exec(select(Tenant).order_by(Tenant.id)).first()
         if not tenant:
             tenant = Tenant(name="Default Company", subdomain="default")
             session.add(tenant)
@@ -27,31 +27,31 @@ class AuthService:
             session.refresh(tenant)
             print(f"INFO: Created default Tenant (ID: {tenant.id})")
 
-        # 1. Create Default Admin
-        user = session.exec(select(User).where(User.username == "admin")).first()
+        user = session.exec(select(User).where(User.username == "admin", User.tenant_id == tenant.id)).first()
         if not user:
-            # Use env var or fallback to random secure string if not set
-            default_password = os.getenv("ADMIN_PASSWORD", "Admin123!@#")
+            default_password = os.getenv("ADMIN_PASSWORD")
+            if not default_password:
+                default_password = secrets.token_urlsafe(12)
+                print(f"WARNING: ADMIN_PASSWORD not set. Generated temporary admin password: {default_password}")
             hashed = AuthService.get_password_hash(default_password)
             admin = User(
-                username="admin", 
-                password_hash=hashed, 
-                role="admin", 
+                username="admin",
+                password_hash=hashed,
+                role="admin",
                 full_name="Administrador",
-                tenant_id=tenant.id
+                tenant_id=tenant.id,
             )
             session.add(admin)
             print(f"INFO: Created default user 'admin' (Tenant: {tenant.id})")
-        
-        # 2. Create Default Settings
+
         settings = session.exec(select(Settings).where(Settings.tenant_id == tenant.id)).first()
         if not settings:
             default_settings = Settings(
                 tenant_id=tenant.id,
-                company_name="NexPos", 
-                logo_url="/static/images/logo.png"
+                company_name="NexPos",
+                logo_url="/static/images/logo.png",
             )
             session.add(default_settings)
             print("INFO: Created default settings for Tenant")
-            
+
         session.commit()

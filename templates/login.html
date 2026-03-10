@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Iniciar Sesión - NexPos{% endblock %}
+{% block title %}Iniciar sesion - NexPos Cloud{% endblock %}
 
 {% block head %}
 <style>
@@ -8,52 +8,57 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        min-height: 80vh;
+        min-height: 84vh;
     }
 
     .login-card {
         width: 100%;
-        max-width: 400px;
+        max-width: 460px;
         text-align: center;
+        padding: 36px;
     }
 
     .navbar {
         display: none;
     }
 
-    /* Hide nav on login */
+    .login-logo img {
+        width: 72px;
+        height: 72px;
+        object-fit: contain;
+        margin-bottom: 16px;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="login-container">
-    <div class="login-card">
-        <div class="logo">
-            <img src="/static/images/berelk_logo.png" alt="Logo">
+    <div class="login-card glass-card">
+        <div class="login-logo">
+            <img src="{{ settings.logo_url }}" alt="{{ settings.company_name }}">
         </div>
-        <h2>Bienvenido a Berel K</h2>
-        <p style="color: var(--text-muted); margin-bottom: 32px;">Inicia sesión para continuar</p>
+        <p class="eyebrow">Operacion centralizada</p>
+        <h2>{{ settings.company_name }}</h2>
+        <p style="color: var(--text-muted); margin-bottom: 32px;">Ingresa a tu panel para ventas, stock y clientes en un solo lugar.</p>
 
         {% if error %}
-        <div
-            style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 12px; border-radius: 8px; margin-bottom: 24px; font-size: 0.9rem;">
+        <div style="background: rgba(239, 68, 68, 0.12); color: #b91c1c; padding: 12px; border-radius: 12px; margin-bottom: 24px; font-size: 0.95rem;">
             {{ error }}
         </div>
         {% endif %}
 
         <form action="/login" method="post">
             <div style="text-align: left;">
-                <label style="display: block; margin-bottom: 8px; font-size: 0.9rem; font-weight: 500;">Usuario</label>
+                <label style="display: block; margin-bottom: 8px; font-size: 0.9rem; font-weight: 600;">Usuario</label>
                 <input type="text" name="username" required placeholder="admin" autofocus>
             </div>
 
             <div style="text-align: left; margin-top: 16px;">
-                <label
-                    style="display: block; margin-bottom: 8px; font-size: 0.9rem; font-weight: 500;">Contraseña</label>
-                <input type="password" name="password" required placeholder="••••••••">
+                <label style="display: block; margin-bottom: 8px; font-size: 0.9rem; font-weight: 600;">Contrasena</label>
+                <input type="password" name="password" required placeholder="Tu acceso seguro">
             </div>
 
-            <button type="submit" class="btn" style="width: 100%; margin-top: 32px; padding: 14px;">Ingresar</button>
+            <button type="submit" class="btn" style="width: 100%; margin-top: 28px; padding: 14px;">Ingresar</button>
         </form>
     </div>
 </div>

@@ -1,0 +1,432 @@
+from __future__ import annotations
+
+import gzip
+import json
+import os
+import uuid
+from io import BytesIO
+from typing import Optional
+
+import pandas as pd
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from sqlmodel import Session, delete, select
+
+from database.models import Client, Product, Sale, Settings, User
+from database.session import get_session
+from services.auth_service import AuthService
+from services.database_backup_service import create_backup_file, get_local_backup_path, list_local_backups
+from services.migration_service import run_schema_migrations
+from services.settings_service import SettingsService
+from services.tenant_backup_service import export_tenant_snapshot, restore_tenant_snapshot
+from web.dependencies import get_settings, get_tenant, require_auth
+
+router = APIRouter()
+
+
+def _templates():
+    from fastapi.templating import Jinja2Templates
+    return Jinja2Templates(directory="templates")
+
+
+@router.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings)):
+    SettingsService.ensure_admin(user)
+    return _templates().TemplateResponse("settings.html", {"request": request, "user": user, "settings": settings, "active_page": "settings"})
+
+
+@router.get("/admin")
+def admin_page(user: User = Depends(require_auth)):
+    SettingsService.ensure_admin(user)
+    return RedirectResponse(url="/settings", status_code=307)
+
+
+@router.get("/api/settings")
+def read_settings(
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    return SettingsService.get_or_create_settings(session, tenant_id=tenant_id)
+
+
+@router.post("/api/settings")
+async def update_settings(
+    request: Request,
+    company_name: Optional[str] = Form(None),
+    printer_name: Optional[str] = Form(None),
+    label_width_mm: Optional[int] = Form(None),
+    label_height_mm: Optional[int] = Form(None),
+    logo_file: Optional[UploadFile] = File(None),
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    form_data = await request.form()
+    SettingsService.validate_supported_fields(form_data.keys())
+    settings = SettingsService.get_or_create_settings(session, tenant_id=tenant_id)
+    SettingsService.apply_updates(
+        session=session,
+        settings=settings,
+        company_name=company_name,
+        printer_name=printer_name,
+        label_width_mm=label_width_mm,
+        label_height_mm=label_height_mm,
+        logo_file=logo_file,
+    )
+    return {"status": "success"}
+
+
+@router.get("/migrate-schema")
+def migrate_schema(session: Session = Depends(get_session), user: User = Depends(require_auth)):
+    SettingsService.ensure_admin(user)
+    return {"status": "success", "results": run_schema_migrations(session)}
+
+
+@router.get("/api/backup")
+def download_backup(
+    user: User = Depends(require_auth),
+    session: Session = Depends(get_session),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    data = export_tenant_snapshot(session, tenant_id)
+    json_str = json.dumps(data, indent=2, default=str)
+    return Response(
+        content=json_str,
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="tenant_backup.json"'},
+    )
+
+
+@router.get("/api/users")
+def get_users(
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    return session.exec(select(User).where(User.tenant_id == tenant_id)).all()
+
+
+@router.post("/api/users")
+def create_user(
+    username: str = Form(...),
+    password: str = Form(...),
+    role: str = Form(...),
+    full_name: Optional[str] = Form(None),
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    hashed = AuthService.get_password_hash(password)
+    new_user = User(
+        username=username.strip(),
+        password_hash=hashed,
+        role=role,
+        full_name=full_name,
+        tenant_id=tenant_id,
+    )
+    session.add(new_user)
+    try:
+        session.commit()
+        session.refresh(new_user)
+    except Exception:
+        session.rollback()
+        raise HTTPException(400, "Username already exists")
+    return new_user
+
+
+@router.delete("/api/users/{id}")
+def delete_user(
+    id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    if user.id == id:
+        raise HTTPException(400, "Cannot delete yourself")
+    target = session.get(User, id)
+    if not target or target.tenant_id != tenant_id:
+        raise HTTPException(404, "User not found")
+    session.delete(target)
+    session.commit()
+    return {"ok": True}
+
+
+@router.get("/api/admin/backup")
+def create_system_backup(
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    return export_tenant_snapshot(session, tenant_id)
+
+
+@router.post("/api/admin/backups/create")
+def create_database_backup_file(
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    return create_backup_file(session, tenant_id=tenant_id)
+
+
+@router.get("/api/admin/backups/list")
+def list_database_backup_files(
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    return {"backups": list_local_backups(tenant_id=tenant_id)}
+
+
+@router.get("/api/admin/backups/download/{filename}")
+def download_database_backup_file(
+    filename: str,
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    path = get_local_backup_path(filename, tenant_id=tenant_id)
+    return FileResponse(path=path, media_type="application/gzip", filename=path.name)
+
+
+@router.post("/api/admin/restore")
+async def restore_system_backup(
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    try:
+        raw_content = await file.read()
+        content = gzip.decompress(raw_content) if file.filename and file.filename.endswith(".gz") else raw_content
+        data = json.loads(content)
+        return restore_tenant_snapshot(session, tenant_id, data)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        session.rollback()
+        return {"error": f"Restore failed: {exc}"}
+
+
+@router.get("/api/admin/reset-inventory-from-excel")
+def reset_inventory_from_excel(
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    file_path = "productos.xlsx"
+    if not os.path.exists(file_path):
+        return {"error": "File 'productos.xlsx' not found on server root"}
+
+    try:
+        session.exec(delete(Product).where(Product.tenant_id == tenant_id))
+        df = pd.read_excel(file_path)
+        added = 0
+        errors = []
+
+        def get_int(val, default=0):
+            if pd.isna(val):
+                return default
+            try:
+                return int(float(val))
+            except Exception:
+                return default
+
+        def get_float(val, default=0.0):
+            if pd.isna(val):
+                return default
+            try:
+                return float(val)
+            except Exception:
+                return default
+
+        for index, row in df.iterrows():
+            try:
+                name = str(row.get("Name", "")).strip()
+                if not name or name.lower() == "nan" or pd.isna(name):
+                    continue
+
+                barcode = str(row.get("Barcode", "")).strip()
+                if pd.isna(barcode) or barcode.lower() == "nan":
+                    barcode = None
+
+                should_generate = False
+                if not barcode:
+                    should_generate = True
+                    barcode = f"TMP-{uuid.uuid4().hex[:8]}"
+
+                price = get_float(row.get("Price"), 0.0)
+                price_bulk = get_float(row.get("PriceBulk"), None) if not pd.isna(row.get("PriceBulk")) else None
+                if price_bulk is None and price is not None:
+                    price_bulk = price * 12
+
+                prod = Product(
+                    tenant_id=tenant_id,
+                    name=name,
+                    price=price,
+                    stock_quantity=get_int(row.get("Stock"), 0),
+                    barcode=barcode,
+                    category=None if pd.isna(row.get("Category")) else str(row.get("Category")).strip(),
+                    description=None if pd.isna(row.get("Description")) else str(row.get("Description")).strip(),
+                    numeracion=None if pd.isna(row.get("Numeracion")) else str(row.get("Numeracion")).strip(),
+                    cant_bulto=get_int(row.get("CantBulto"), None) if not pd.isna(row.get("CantBulto")) else None,
+                    item_number=None if pd.isna(row.get("ItemNumber")) else str(row.get("ItemNumber")).strip(),
+                    price_retail=get_float(row.get("PriceRetail"), None) if not pd.isna(row.get("PriceRetail")) else None,
+                    price_bulk=price_bulk,
+                )
+                session.add(prod)
+                if should_generate:
+                    session.flush()
+                    prod.barcode = str(prod.id).zfill(8)
+                    session.add(prod)
+                added += 1
+            except Exception as exc:
+                errors.append(f"Row {index}: {exc}")
+
+        session.commit()
+        return {"status": "success", "message": f"Inventory Reset. Added {added} products.", "errors": errors}
+    except Exception as exc:
+        session.rollback()
+        return {"error": str(exc)}
+
+
+@router.get("/api/admin/reset-clients-from-excel")
+def reset_clients_from_excel(
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    file_path = "clientes.xlsx"
+    if not os.path.exists(file_path):
+        return {"error": "File 'clientes.xlsx' not found on server root"}
+
+    try:
+        xls = pd.ExcelFile(file_path)
+        added = 0
+        updated = 0
+        errors = []
+
+        for sheet_name in xls.sheet_names:
+            try:
+                client_name = sheet_name.strip()
+                df = pd.read_excel(file_path, sheet_name=sheet_name)
+                initial_debt = 0.0
+                for debt_col in ("Restan", "Saldo"):
+                    if debt_col in df.columns:
+                        last_val = df[debt_col].iloc[-1]
+                        initial_debt = float(last_val) if not pd.isna(last_val) else 0.0
+                        break
+
+                existing = session.exec(
+                    select(Client).where(Client.name == client_name, Client.tenant_id == tenant_id)
+                ).first()
+                if existing:
+                    updated += 1
+                    client_id = existing.id
+                else:
+                    new_client = Client(name=client_name, tenant_id=tenant_id)
+                    session.add(new_client)
+                    session.commit()
+                    session.refresh(new_client)
+                    added += 1
+                    client_id = new_client.id
+
+                if initial_debt > 0:
+                    has_sales = session.exec(
+                        select(Sale).where(Sale.client_id == client_id, Sale.tenant_id == tenant_id)
+                    ).first()
+                    if not has_sales:
+                        session.add(
+                            Sale(
+                                tenant_id=tenant_id,
+                                client_id=client_id,
+                                user_id=user.id,
+                                total_amount=initial_debt,
+                                amount_paid=0,
+                                payment_status="pending",
+                                payment_method="account",
+                            )
+                        )
+                        session.commit()
+            except Exception as exc:
+                errors.append(f"Sheet {sheet_name}: {exc}")
+
+        return {"status": "success", "added": added, "updated": updated, "sheets_processed": len(xls.sheet_names), "errors": errors}
+    except Exception as exc:
+        session.rollback()
+        return {"error": str(exc)}
+
+
+@router.get("/api/products/export")
+def export_products_api(
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    products = session.exec(select(Product).where(Product.tenant_id == tenant_id)).all()
+    data = [{
+        "ID": p.id,
+        "Name": p.name,
+        "Category": p.category,
+        "ItemNumber": p.item_number,
+        "Barcode": p.barcode,
+        "Price": p.price,
+        "Stock": p.stock_quantity,
+        "Description": p.description,
+        "Numeracion": p.numeracion,
+        "CantBulto": p.cant_bulto,
+        "PriceBulk": p.price_bulk,
+        "PriceRetail": p.price_retail,
+    } for p in products]
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        pd.DataFrame(data).to_excel(writer, index=False)
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        headers={"Content-Disposition": 'attachment; filename="productos_export.xlsx"'},
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@router.get("/api/clients/export")
+def export_clients_api(
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    clients = session.exec(select(Client).where(Client.tenant_id == tenant_id)).all()
+    data = [{
+        "ID": c.id,
+        "Name": c.name,
+        "RazonSocial": c.razon_social,
+        "CUIT": c.cuit,
+        "Phone": c.phone,
+        "Email": c.email,
+        "Address": c.address,
+        "IVACategory": c.iva_category,
+        "CreditLimit": c.credit_limit,
+        "TransportName": c.transport_name,
+        "TransportAddress": c.transport_address,
+    } for c in clients]
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        pd.DataFrame(data).to_excel(writer, index=False)
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        headers={"Content-Disposition": 'attachment; filename="clientes_export.xlsx"'},
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )

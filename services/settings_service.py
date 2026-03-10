@@ -1,30 +1,27 @@
 from __future__ import annotations
 
 import os
-import shutil
 import uuid
 from typing import Iterable, Optional
 
 from fastapi import HTTPException, UploadFile
 from sqlmodel import Session, select
 
-from database.models import Settings, User
+from database.models import Settings, Tenant, User
 
 
-# Magic byte signatures for supported image formats
 _IMAGE_SIGNATURES = [
-    (b"\x89PNG\r\n\x1a\n",),                          # PNG
-    (b"\xff\xd8\xff",),                                # JPEG
-    (b"RIFF", b"WEBP"),                                # WEBP (RIFF....WEBP)
-    (b"GIF87a", b"GIF89a"),                            # GIF
-    (b"<?xml", b"<svg"),                               # SVG (text-based)
+    (b"\x89PNG\r\n\x1a\n",),
+    (b"\xff\xd8\xff",),
+    (b"RIFF", b"WEBP"),
+    (b"GIF87a", b"GIF89a"),
+    (b"<?xml", b"<svg"),
 ]
 
-MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB
+MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024
 
 
 def _has_valid_image_signature(header: bytes) -> bool:
-    """Check if file header matches known image magic bytes."""
     for sig_group in _IMAGE_SIGNATURES:
         for sig in sig_group:
             if header[:len(sig)] == sig:
@@ -48,12 +45,22 @@ class SettingsService:
             raise HTTPException(status_code=403, detail="Admin role required")
 
     @staticmethod
-    def get_or_create_settings(session: Session) -> Settings:
-        settings = session.exec(select(Settings)).first()
+    def get_or_create_settings(session: Session, tenant_id: Optional[int] = None) -> Settings:
+        effective_tenant_id = tenant_id
+        if effective_tenant_id is None:
+            tenant = session.exec(select(Tenant).order_by(Tenant.id)).first()
+            if not tenant:
+                tenant = Tenant(name="Default Company", subdomain="default")
+                session.add(tenant)
+                session.commit()
+                session.refresh(tenant)
+            effective_tenant_id = tenant.id
+
+        settings = session.exec(select(Settings).where(Settings.tenant_id == effective_tenant_id)).first()
         if settings:
             return settings
 
-        settings = Settings(company_name="Berel K")
+        settings = Settings(company_name="Berel K", tenant_id=effective_tenant_id)
         session.add(settings)
         session.commit()
         session.refresh(settings)
@@ -99,11 +106,9 @@ class SettingsService:
             settings.label_height_mm = label_height_mm
 
         if logo_file and logo_file.filename:
-            # 1. Check MIME type header
             if logo_file.content_type not in SettingsService.SUPPORTED_LOGO_CONTENT_TYPES:
                 raise HTTPException(status_code=400, detail="logo_file must be a valid image (png, jpg, webp, gif, svg)")
 
-            # 2. Read file content and check size
             file_content = logo_file.file.read()
             if len(file_content) > MAX_LOGO_SIZE_BYTES:
                 raise HTTPException(
@@ -111,14 +116,12 @@ class SettingsService:
                     detail=f"logo_file exceeds maximum size of {MAX_LOGO_SIZE_BYTES // (1024*1024)} MB",
                 )
 
-            # 3. Verify magic bytes (real file signature)
             if not _has_valid_image_signature(file_content[:16]):
                 raise HTTPException(
                     status_code=400,
                     detail="logo_file content does not match a valid image format",
                 )
 
-            # 4. Save with UUID filename
             _, ext = os.path.splitext(logo_file.filename)
             ext = ext.lower() or ".png"
             file_name = f"logo-{uuid.uuid4().hex}{ext}"

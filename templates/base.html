@@ -1,52 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Berel K Store{% endblock %}</title>
-    <!-- Styles -->
-    <link rel="stylesheet" href="/static/css/style.css?v=4">
+    <title>{% block title %}NexPos Cloud{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=5">
     <link rel="manifest" href="/static/manifest.json">
-    <meta name="theme-color" content="#0f172a">
+    <meta name="theme-color" content="#14324a">
     <link rel="apple-touch-icon" href="/static/images/icon-192.png">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     {% block head %}{% endblock %}
 </head>
-
 <body>
-
+    <div class="page-shell"></div>
     <div class="container">
-        <!-- Navigation -->
         <nav class="navbar glass-card">
             <a href="/" class="logo">
-                <img src="{{ settings.logo_url }}" height="30" style="vertical-align: middle; margin-right: 8px;">
-                {{ settings.company_name }} <span style="font-size: 0.8em; opacity: 0.7;">(v2.5)</span>
+                <img src="{{ settings.logo_url }}" alt="{{ settings.company_name }}" height="32">
+                <span>{{ settings.company_name }}</span>
+                <small>Cloud Retail</small>
             </a>
             <div class="nav-links">
                 <a href="/" class="{% if active_page == 'home' %}active{% endif %}">Dashboard</a>
                 <a href="/products" class="{% if active_page == 'products' %}active{% endif %}">Productos</a>
-                <a href="/products/labels" class="{% if active_page == 'print_labels' %}active{% endif %}">🏷️
-                    Etiquetas</a>
+                <a href="/products/labels" class="{% if active_page == 'print_labels' %}active{% endif %}">Etiquetas</a>
                 <a href="/clients" class="{% if active_page == 'clients' %}active{% endif %}">Clientes</a>
                 <a href="/suppliers" class="{% if active_page == 'suppliers' %}active{% endif %}">Proveedores</a>
                 <a href="/cash" class="{% if active_page == 'cash' %}active{% endif %}">Caja</a>
-                <a href="/pos" class="{% if active_page == 'pos' %}active{% endif %}">Punto de Venta</a>
-                <a href="/sales" class="{% if active_page == 'sales' %}active{% endif %}">Reportes</a>
-                <a href="/picking" class="{% if active_page == 'picking' %}active{% endif %}">📲 Picking</a>
+                <a href="/pos" class="{% if active_page == 'pos' %}active{% endif %}">POS</a>
+                <a href="/sales" class="{% if active_page == 'sales' %}active{% endif %}">Ventas</a>
+                <a href="/picking" class="{% if active_page == 'picking' %}active{% endif %}">Picking</a>
                 {% if user and user.role == "admin" %}
-                <a href="/settings" class="{% if active_page == 'settings' %}active{% endif %}">Configuración</a>
+                <a href="/settings" class="{% if active_page == 'settings' %}active{% endif %}">Configuracion</a>
                 {% endif %}
             </div>
+            {% if user %}
+            <div class="user-chip">
+                <span>{{ user.full_name or user.username }}</span>
+                <a href="/logout">Salir</a>
+            </div>
+            {% endif %}
         </nav>
 
-        <!-- Main Content -->
         <main>
-            {% block content %}
-            {% endblock %}
+            {% block content %}{% endblock %}
         </main>
     </div>
 
-    <!-- Scripts -->
-    {% block scripts %}
-    {% endblock %}
+    {% block scripts %}{% endblock %}
 </body>
-
 </html>
