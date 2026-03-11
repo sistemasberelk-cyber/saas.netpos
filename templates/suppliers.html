@@ -4,12 +4,12 @@
 
 {% block content %}
 <div class="glass-card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-        <h2>Gestión de Proveedores</h2>
-        <div>
-            <button onclick="window.print()" class="btn" style="background-color: #2c3e50; margin-right: 8px;">🖨️
-                Imprimir Listado</button>
-            <button onclick="openModal()" class="btn">+ Nuevo Proveedor</button>
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
+        <h2>Gestion de Proveedores</h2>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button onclick="window.print()" class="btn" style="background-color: #2c3e50;">Imprimir Listado</button>
+            <button onclick="openPurchaseModal()" class="btn" style="background-color: #0f766e;">+ Nueva Compra</button>
+            <button onclick="openSupplierModal()" class="btn">+ Nuevo Proveedor</button>
         </div>
     </div>
 
@@ -27,37 +27,25 @@
                 {% for supplier in suppliers %}
                 <tr>
                     <td>
-                        <div style="font-weight: 500;">{{ supplier.name }}</div>
+                        <div style="font-weight: 600;">{{ supplier.name }}</div>
                         {% if supplier.cuit %}
-                        <div style="font-size: 0.75rem; color: #6b7280; font-family: monospace;">CUIT: {{ supplier.cuit
-                            }}
-                        </div>
+                        <div style="font-size: 0.75rem; color: #6b7280; font-family: monospace;">CUIT: {{ supplier.cuit }}</div>
                         {% endif %}
                     </td>
                     <td>
-                        {% if supplier.phone %}<div>📱 {{ supplier.phone }}</div>{% endif %}
-                        {% if supplier.email %}<div>📧 {{ supplier.email }}</div>{% endif %}
-                        {% if supplier.address %}
-                        <div style="font-size: 0.75rem; color: #6b7280; margin-top: 2px;">📍 {{ supplier.address }}
-                        </div>
-                        {% endif %}
+                        {% if supplier.phone %}<div>{{ supplier.phone }}</div>{% endif %}
+                        {% if supplier.email %}<div>{{ supplier.email }}</div>{% endif %}
+                        {% if supplier.address %}<div style="font-size: 0.75rem; color: #6b7280; margin-top: 2px;">{{ supplier.address }}</div>{% endif %}
                     </td>
                     <td>
-                        <div
-                            style="font-weight: bold; color: {% if balances[supplier.id] > 0 %}#ef4444{% else %}#10b981{% endif %};">
+                        <div style="font-weight: bold; color: {% if balances[supplier.id] > 0 %}#ef4444{% else %}#10b981{% endif %};">
                             ${{ balances[supplier.id] | round(2) }}
                         </div>
                     </td>
                     <td>
-                        <a href="/suppliers/{{supplier.id}}/account" class="btn"
-                            style="padding: 4px 8px; font-size: 0.8rem; background: transparent; border: 1px solid #10b981; color: #10b981; margin-right: 8px; text-decoration: none;">Ver
-                            Cuenta</a>
-                        <button
-                            onclick="editSupplier('{{supplier.id}}', '{{supplier.name}}', '{{supplier.phone}}', '{{supplier.email}}', '{{supplier.address}}', '{{supplier.cuit}}', '{{supplier.notes}}')"
-                            class="btn"
-                            style="padding: 4px 8px; font-size: 0.8rem; background: transparent; border: 1px solid var(--primary-color); color: var(--primary-color);">Editar</button>
-                        <button onclick="deleteSupplier('{{supplier.id}}')" class="btn"
-                            style="padding: 4px 8px; font-size: 0.8rem; background: transparent; border: 1px solid #ef4444; color: #ef4444; margin-left: 8px;">Eliminar</button>
+                        <a href="/suppliers/{{ supplier.id }}/account" class="btn" style="padding: 4px 8px; font-size: 0.8rem; background: transparent; border: 1px solid #10b981; color: #10b981; margin-right: 8px; text-decoration: none;">Ver Cuenta</a>
+                        <button onclick='editSupplier({{ supplier.id }}, {{ supplier.name|tojson }}, {{ supplier.phone|tojson }}, {{ supplier.email|tojson }}, {{ supplier.address|tojson }}, {{ supplier.cuit|tojson }}, {{ supplier.notes|tojson }})' class="btn" style="padding: 4px 8px; font-size: 0.8rem; background: transparent; border: 1px solid var(--primary-color); color: var(--primary-color);">Editar</button>
+                        <button onclick="deleteSupplier('{{ supplier.id }}')" class="btn" style="padding: 4px 8px; font-size: 0.8rem; background: transparent; border: 1px solid #ef4444; color: #ef4444; margin-left: 8px;">Eliminar</button>
                     </td>
                 </tr>
                 {% else %}
@@ -70,18 +58,14 @@
     </div>
 </div>
 
-<!-- Modal -->
-<div id="supplier-modal"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 100; justify-content: center; align-items: center;">
-    <div class="glass-card"
-        style="width: 95%; max-width: 600px; background: white; max-height: 90vh; overflow-y: auto;">
-        <h3 id="modal-title" style="margin-bottom: 24px;">Nuevo Proveedor</h3>
+<div id="supplier-modal" class="overlay-modal" style="display: none;">
+    <div class="glass-card modal-card" style="max-width: 600px;">
+        <h3 id="supplier-modal-title" style="margin-bottom: 24px;">Nuevo Proveedor</h3>
         <form id="supplier-form" onsubmit="submitSupplier(event)">
             <input type="hidden" id="edit-id" name="id">
 
             <label style="display: block; margin-bottom: 8px; font-weight: 600;">Nombre del Proveedor / Empresa</label>
-            <input type="text" id="s-name" name="name" required placeholder="Distribuidora X"
-                style="margin-bottom: 16px;">
+            <input type="text" id="s-name" name="name" required placeholder="Distribuidora X" style="margin-bottom: 16px;">
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
                 <div>
@@ -89,81 +73,283 @@
                     <input type="text" id="s-cuit" name="cuit" placeholder="30-12345678-9">
                 </div>
                 <div>
-                    <label style="display: block; margin-bottom: 4px; font-weight: 500;">Teléfono / WhatsApp</label>
+                    <label style="display: block; margin-bottom: 4px; font-weight: 500;">Telefono / WhatsApp</label>
                     <input type="text" id="s-phone" name="phone" placeholder="+54 9 11 1234-5678">
                 </div>
             </div>
 
             <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email</label>
-            <input type="email" id="s-email" name="email" placeholder="ventas@proveedor.com"
-                style="margin-bottom: 16px;">
+            <input type="email" id="s-email" name="email" placeholder="ventas@proveedor.com" style="margin-bottom: 16px;">
 
-            <label style="display: block; margin-bottom: 8px; font-weight: 500;">Dirección Comercial</label>
-            <input type="text" id="s-address" name="address" placeholder="Av. Siempre Viva 742"
-                style="margin-bottom: 16px;">
+            <label style="display: block; margin-bottom: 8px; font-weight: 500;">Direccion Comercial</label>
+            <input type="text" id="s-address" name="address" placeholder="Av. Siempre Viva 742" style="margin-bottom: 16px;">
 
             <label style="display: block; margin-bottom: 8px; font-weight: 500;">Notas</label>
-            <textarea id="s-notes" name="notes" placeholder="Condiciones de pago, horarios..." rows="3"
-                style="margin-bottom: 24px; width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px;"></textarea>
+            <textarea id="s-notes" name="notes" placeholder="Condiciones de pago, horarios..." rows="3" style="margin-bottom: 24px; width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px;"></textarea>
 
             <div style="text-align: right; display: flex; justify-content: flex-end; gap: 12px;">
-                <button type="button" onclick="closeModal()" class="btn"
-                    style="background: white; color: #666; border: 1px solid #e5e7eb; padding: 10px 24px;">Cancelar</button>
-                <button type="submit" class="btn"
-                    style="padding: 10px 32px; font-size: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">💾
-                    Guardar</button>
+                <button type="button" onclick="closeSupplierModal()" class="btn" style="background: white; color: #666; border: 1px solid #e5e7eb; padding: 10px 24px;">Cancelar</button>
+                <button type="submit" class="btn" style="padding: 10px 32px; font-size: 1rem;">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="purchase-modal" class="overlay-modal" style="display: none;">
+    <div class="glass-card modal-card" style="max-width: 980px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+            <div>
+                <h3 style="margin: 0;">Registrar Compra</h3>
+                <p style="margin: 6px 0 0; color: var(--text-muted);">Esto actualiza stock, cuenta corriente y caja si hubo pago.</p>
+            </div>
+            <button type="button" onclick="addPurchaseRow()" class="btn" style="background-color: #0f766e;">+ Agregar Item</button>
+        </div>
+
+        <form id="purchase-form" onsubmit="submitPurchase(event)">
+            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                <div>
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Proveedor</label>
+                    <select id="purchase-supplier" required style="width: 100%; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <option value="">Seleccionar proveedor</option>
+                        {% for supplier in suppliers %}
+                        <option value="{{ supplier.id }}">{{ supplier.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Factura / Remito</label>
+                    <input type="text" id="purchase-invoice" placeholder="Ej. FC-00123">
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Pagado ahora</label>
+                    <input type="number" id="purchase-paid" min="0" step="0.01" value="0">
+                </div>
+            </div>
+
+            <div style="overflow-x: auto; margin-bottom: 16px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left; padding: 10px;">Producto</th>
+                            <th style="text-align: left; padding: 10px; width: 120px;">Cantidad</th>
+                            <th style="text-align: left; padding: 10px; width: 140px;">Costo Unit.</th>
+                            <th style="text-align: left; padding: 10px; width: 140px;">Subtotal</th>
+                            <th style="width: 80px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="purchase-items"></tbody>
+                </table>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px;">
+                <div>
+                    <div style="font-size: 0.9rem; color: var(--text-muted);">Total de la compra</div>
+                    <div id="purchase-total" style="font-size: 2rem; font-weight: 800;">$0.00</div>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <button type="button" onclick="closePurchaseModal()" class="btn" style="background: white; color: #666; border: 1px solid #e5e7eb;">Cancelar</button>
+                    <button type="submit" class="btn" style="background-color: #0f766e;">Registrar Compra</button>
+                </div>
             </div>
         </form>
     </div>
 </div>
 
 <script>
-    function openModal() {
+    const productsCatalog = {{ products_catalog | safe }};
+
+    function openSupplierModal() {
         document.getElementById('supplier-modal').style.display = 'flex';
         document.getElementById('supplier-form').reset();
         document.getElementById('edit-id').value = '';
-        document.getElementById('modal-title').innerText = 'Nuevo Proveedor';
+        document.getElementById('supplier-modal-title').innerText = 'Nuevo Proveedor';
     }
-    function closeModal() { document.getElementById('supplier-modal').style.display = 'none'; }
+
+    function closeSupplierModal() {
+        document.getElementById('supplier-modal').style.display = 'none';
+    }
 
     function editSupplier(id, name, phone, email, address, cuit, notes) {
         document.getElementById('supplier-modal').style.display = 'flex';
-        document.getElementById('modal-title').innerText = 'Editar Proveedor';
+        document.getElementById('supplier-modal-title').innerText = 'Editar Proveedor';
         document.getElementById('edit-id').value = id;
-        document.getElementById('s-name').value = name;
-        document.getElementById('s-phone').value = phone === 'None' ? '' : phone;
-        document.getElementById('s-email').value = email === 'None' ? '' : email;
-        document.getElementById('s-address').value = address === 'None' ? '' : address;
-        document.getElementById('s-cuit').value = cuit === 'None' ? '' : cuit;
-        document.getElementById('s-notes').value = notes === 'None' ? '' : notes;
+        document.getElementById('s-name').value = name || '';
+        document.getElementById('s-phone').value = phone || '';
+        document.getElementById('s-email').value = email || '';
+        document.getElementById('s-address').value = address || '';
+        document.getElementById('s-cuit').value = cuit || '';
+        document.getElementById('s-notes').value = notes || '';
     }
 
     async function deleteSupplier(id) {
-        if (!confirm('¿Estás seguro de eliminar este proveedor?')) return;
+        if (!confirm('Estas seguro de eliminar este proveedor?')) return;
         try {
             const res = await fetch(`/api/suppliers/${id}`, { method: 'DELETE' });
             if (res.ok) window.location.reload();
             else alert('Error al eliminar');
-        } catch (e) { alert('Error de conexión'); }
+        } catch {
+            alert('Error de conexion');
+        }
     }
 
     async function submitSupplier(e) {
         e.preventDefault();
         const id = document.getElementById('edit-id').value;
-        const form = e.target;
-        const formData = new FormData(form);
-
+        const formData = new FormData(e.target);
         const url = id ? `/api/suppliers/${id}` : '/api/suppliers';
         const method = id ? 'PUT' : 'POST';
 
         try {
-            const res = await fetch(url, { method: method, body: formData });
+            const res = await fetch(url, { method, body: formData });
             if (res.ok) window.location.reload();
-            else alert("Error al guardar");
-        } catch (err) { alert("Error de conexión"); }
+            else alert('Error al guardar');
+        } catch {
+            alert('Error de conexion');
+        }
+    }
+
+    function openPurchaseModal() {
+        if (!productsCatalog.length) {
+            alert('Necesitas productos cargados antes de registrar compras.');
+            return;
+        }
+        if (document.querySelectorAll('#purchase-supplier option').length <= 1) {
+            alert('Necesitas crear al menos un proveedor antes de registrar compras.');
+            return;
+        }
+        document.getElementById('purchase-modal').style.display = 'flex';
+        document.getElementById('purchase-form').reset();
+        document.getElementById('purchase-items').innerHTML = '';
+        addPurchaseRow();
+        updatePurchaseTotal();
+    }
+
+    function closePurchaseModal() {
+        document.getElementById('purchase-modal').style.display = 'none';
+    }
+
+    function productOptions(selectedId = '') {
+        const options = ['<option value="">Seleccionar producto</option>'];
+        for (const product of productsCatalog) {
+            const selected = String(product.id) === String(selectedId) ? 'selected' : '';
+            const label = `${product.name}${product.item_number ? ` (${product.item_number})` : ''}`;
+            options.push(`<option value="${product.id}" ${selected}>${label}</option>`);
+        }
+        return options.join('');
+    }
+
+    function addPurchaseRow(item = {}) {
+        const row = document.createElement('tr');
+        row.className = 'purchase-row';
+        row.innerHTML = `
+            <td style="padding: 10px;">
+                <select class="purchase-product" style="width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    ${productOptions(item.product_id || '')}
+                </select>
+            </td>
+            <td style="padding: 10px;"><input class="purchase-qty" type="number" min="1" step="1" value="${item.quantity || 1}" style="width: 100%;"></td>
+            <td style="padding: 10px;"><input class="purchase-cost" type="number" min="0" step="0.01" value="${item.unit_cost || 0}" style="width: 100%;"></td>
+            <td style="padding: 10px;"><strong class="purchase-subtotal">$0.00</strong></td>
+            <td style="padding: 10px;"><button type="button" class="btn" style="background: transparent; color: #ef4444; border: 1px solid #ef4444;" onclick="removePurchaseRow(this)">Quitar</button></td>
+        `;
+        document.getElementById('purchase-items').appendChild(row);
+        row.querySelector('.purchase-qty').addEventListener('input', updatePurchaseTotal);
+        row.querySelector('.purchase-cost').addEventListener('input', updatePurchaseTotal);
+        updatePurchaseTotal();
+    }
+
+    function removePurchaseRow(button) {
+        const rows = document.querySelectorAll('.purchase-row');
+        if (rows.length === 1) {
+            alert('La compra necesita al menos un item.');
+            return;
+        }
+        button.closest('tr').remove();
+        updatePurchaseTotal();
+    }
+
+    function collectPurchaseItems() {
+        const rows = Array.from(document.querySelectorAll('.purchase-row'));
+        return rows.map(row => ({
+            product_id: Number(row.querySelector('.purchase-product').value),
+            quantity: Number(row.querySelector('.purchase-qty').value),
+            unit_cost: Number(row.querySelector('.purchase-cost').value)
+        }));
+    }
+
+    function updatePurchaseTotal() {
+        let total = 0;
+        document.querySelectorAll('.purchase-row').forEach(row => {
+            const qty = Number(row.querySelector('.purchase-qty').value || 0);
+            const cost = Number(row.querySelector('.purchase-cost').value || 0);
+            const subtotal = qty * cost;
+            row.querySelector('.purchase-subtotal').textContent = `$${subtotal.toFixed(2)}`;
+            total += subtotal;
+        });
+        document.getElementById('purchase-total').textContent = `$${total.toFixed(2)}`;
+    }
+
+    async function submitPurchase(e) {
+        e.preventDefault();
+        const items = collectPurchaseItems();
+        if (!items.length) {
+            alert('Agrega al menos un item.');
+            return;
+        }
+        if (items.some(item => !item.product_id || item.quantity <= 0 || item.unit_cost < 0)) {
+            alert('Revisa proveedor, productos, cantidades y costos.');
+            return;
+        }
+
+        const payload = {
+            supplier_id: Number(document.getElementById('purchase-supplier').value),
+            invoice_number: document.getElementById('purchase-invoice').value,
+            amount_paid: Number(document.getElementById('purchase-paid').value || 0),
+            items
+        };
+
+        if (!payload.supplier_id) {
+            alert('Selecciona un proveedor.');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/purchases', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.detail || data.error || 'No se pudo registrar la compra');
+                return;
+            }
+            window.location.href = data.redirect_url || '/suppliers';
+        } catch {
+            alert('Error de conexion');
+        }
     }
 </script>
 <style>
+    .overlay-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        backdrop-filter: blur(4px);
+        z-index: 100;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 24px;
+    }
+
+    .modal-card {
+        width: 100%;
+        background: white;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
     @media print {
         body * {
             visibility: hidden;
