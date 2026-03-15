@@ -14,7 +14,6 @@ import io
 import shutil
 import uuid
 import json
-import secrets
 
 import pandas as pd
 
@@ -40,10 +39,11 @@ async def lifespan(app: FastAPI):
         try:
             AuthService.create_default_user_and_settings(session)
         except Exception as e:
-            print(f"WARNING: Seed Error (non-fatal): {e}")
             session.rollback()
+            raise
 
-        seed_products(session)
+        if os.getenv("SEED_ON_START") == "1":
+            seed_products(session)
     yield
 
 app = FastAPI(title="NexPos System", lifespan=lifespan)
@@ -77,10 +77,10 @@ app.include_router(picking_router)
 # --- Auth Routes ---
 
 from starlette.middleware.sessions import SessionMiddleware
-session_secret = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
-if not os.getenv("SECRET_KEY"):
-    print("WARNING: SECRET_KEY not set. Using ephemeral session secret for this process.")
-app.add_middleware(SessionMiddleware, secret_key=session_secret)
+SESSION_SECRET = os.getenv("SECRET_KEY")
+if not SESSION_SECRET:
+    raise RuntimeError("SECRET_KEY env var is required (set SECRET_KEY).")
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 
 @app.get("/login", response_class=HTMLResponse)
 @app.head("/login")

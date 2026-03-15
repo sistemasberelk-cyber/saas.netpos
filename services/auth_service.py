@@ -2,7 +2,6 @@ from passlib.context import CryptContext
 from sqlmodel import Session, select
 from database.models import User, Settings, Tenant
 import os
-import secrets
 
 pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 print(f"INFO: Password Context Schemes: {pwd_context.schemes()}")
@@ -31,8 +30,7 @@ class AuthService:
         if not user:
             default_password = os.getenv("ADMIN_PASSWORD")
             if not default_password:
-                default_password = secrets.token_urlsafe(12)
-                print(f"WARNING: ADMIN_PASSWORD not set. Generated temporary admin password: {default_password}")
+                raise RuntimeError("ADMIN_PASSWORD env var is required to create the default admin user.")
             hashed = AuthService.get_password_hash(default_password)
             admin = User(
                 username="admin",
