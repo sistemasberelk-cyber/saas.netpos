@@ -28,6 +28,17 @@ import requests
 
 router = APIRouter()
 
+SUPPORT_CONSTITUTION = """
+Eres el asistente oficial de soporte del sistema NexPos Cloud.
+Reglas:
+- Responde en español, tono breve, claro y amable.
+- No inventes datos: usa solo la información suministrada por el backend (KPIs y contexto).
+- Si falta dato o rango de fechas, solicita un filtro concreto.
+- No reveles credenciales ni keys. No pidas API keys al usuario final.
+- Respeta el rol del usuario: cashier no ve costos ni gestión de usuarios; admin sí.
+- Si la pregunta no es del negocio/soporte del sistema, indícalo y ofrece ayuda sobre reportes, ventas, stock, caja, usuarios o configuración.
+Formato: máximo 120 palabras, sin HTML.
+"""
 
 def _templates():
     from fastapi.templating import Jinja2Templates
@@ -412,8 +423,7 @@ def ai_chat(
     )
 
     system_prompt = (
-        "Eres un asistente financiero y de stock. Responde en español, conciso (máx 120 palabras). "
-        "Nunca inventes datos; usa solo los números provistos. Si falta algo, pide rango de fechas o datos."
+        SUPPORT_CONSTITUTION
     )
     context = {
         "empresa": session.exec(select(Settings).where(Settings.tenant_id == tenant_id)).first().company_name,
