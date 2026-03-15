@@ -8,8 +8,10 @@
         <h2>Gestion de Proveedores</h2>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <button onclick="window.print()" class="btn" style="background-color: #2c3e50;">Imprimir Listado</button>
+            {% if user.role == "admin" %}
             <button onclick="openPurchaseModal()" class="btn" style="background-color: #0f766e;">+ Nueva Compra</button>
             <button onclick="openSupplierModal()" class="btn">+ Nuevo Proveedor</button>
+            {% endif %}
         </div>
     </div>
 
@@ -44,8 +46,10 @@
                     </td>
                     <td>
                         <a href="/suppliers/{{ supplier.id }}/account" class="btn" style="padding: 4px 8px; font-size: 0.8rem; background: transparent; border: 1px solid #10b981; color: #10b981; margin-right: 8px; text-decoration: none;">Ver Cuenta</a>
+                        {% if user.role == "admin" %}
                         <button onclick='editSupplier({{ supplier.id }}, {{ supplier.name|tojson }}, {{ supplier.phone|tojson }}, {{ supplier.email|tojson }}, {{ supplier.address|tojson }}, {{ supplier.cuit|tojson }}, {{ supplier.notes|tojson }})' class="btn" style="padding: 4px 8px; font-size: 0.8rem; background: transparent; border: 1px solid var(--primary-color); color: var(--primary-color);">Editar</button>
                         <button onclick="deleteSupplier('{{ supplier.id }}')" class="btn" style="padding: 4px 8px; font-size: 0.8rem; background: transparent; border: 1px solid #ef4444; color: #ef4444; margin-left: 8px;">Eliminar</button>
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}
