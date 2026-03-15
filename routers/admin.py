@@ -161,6 +161,53 @@ def delete_user(
     session.commit()
     return {"ok": True}
 
+# --- Password management ---
+
+def _validate_password_strength(pwd: str):
+    if len(pwd) < 12:
+        raise HTTPException(400, "La clave debe tener al menos 12 caracteres.")
+    if pwd.lower() == pwd or pwd.upper() == pwd:
+        raise HTTPException(400, "Usa mayúsculas y minúsculas.")
+    if not any(c.isdigit() for c in pwd):
+        raise HTTPException(400, "Incluye al menos un número.")
+    if not any(c in "!@#$%^&*()-_=+[]{};:,<.>/?\\|" for c in pwd):
+        raise HTTPException(400, "Incluye al menos un símbolo.")
+
+
+@router.post("/api/users/change-password")
+def change_own_password(
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    user: User = Depends(require_auth),
+    session: Session = Depends(get_session),
+):
+    if not AuthService.verify_password(current_password, user.password_hash):
+        raise HTTPException(400, "La clave actual es incorrecta")
+    _validate_password_strength(new_password)
+    user.password_hash = AuthService.get_password_hash(new_password)
+    session.add(user)
+    session.commit()
+    return {"status": "ok"}
+
+
+@router.post("/api/users/{id}/reset-password")
+def admin_reset_password(
+    id: int,
+    new_password: str = Form(...),
+    user: User = Depends(require_auth),
+    session: Session = Depends(get_session),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    target = session.get(User, id)
+    if not target or target.tenant_id != tenant_id:
+        raise HTTPException(404, "Usuario no encontrado")
+    _validate_password_strength(new_password)
+    target.password_hash = AuthService.get_password_hash(new_password)
+    session.add(target)
+    session.commit()
+    return {"status": "ok"}
+
 
 # --- Reports & Metrics ---
 

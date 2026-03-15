@@ -31,6 +31,10 @@
             style="padding: 12px 24px; font-weight: 500; border-bottom: 2px solid transparent; color: #666; background: none; cursor: pointer;">
             Respaldo
         </button>
+        <button onclick="switchTab('security')" id="tab-security" class="tab-btn"
+            style="padding: 12px 24px; font-weight: 500; border-bottom: 2px solid transparent; color: #666; background: none; cursor: pointer;">
+            Seguridad
+        </button>
     </div>
 
     <!-- GENERAL SETTINGS -->
@@ -71,6 +75,34 @@
         </form>
     </div>
 
+    <!-- SECURITY -->
+    <div id="content-security" class="tab-content" style="display: none;">
+        <h3 style="margin-bottom: 12px;">Seguridad</h3>
+        <p style="margin-bottom: 16px;">Cambia tu clave o reinicia la de otro usuario (solo admin).</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+            <form id="form-change-pass" class="stacked-form glass-card" onsubmit="changeOwnPass(event)">
+                <h4>Mi contraseña</h4>
+                <label>Clave actual</label>
+                <input type="password" id="curr-pass" required>
+                <label>Nueva clave</label>
+                <input type="password" id="new-pass" required placeholder="Mínimo 12 chars, may/min/num/símbolo">
+                <label>Confirmar clave</label>
+                <input type="password" id="new-pass-2" required>
+                <button type="submit" class="btn" style="margin-top: 12px;">Actualizar mi clave</button>
+            </form>
+
+            <form id="form-reset-pass" class="stacked-form glass-card" onsubmit="resetUserPass(event)">
+                <h4>Reset para otro usuario</h4>
+                <label>ID de usuario</label>
+                <input type="number" id="reset-user-id" required min="1">
+                <label>Nueva clave</label>
+                <input type="password" id="reset-pass" required placeholder="Mínimo 12 chars, may/min/num/símbolo">
+                <button type="submit" class="btn btn-secondary" style="margin-top: 12px;">Resetear contraseña</button>
+                <small>Solo administradores pueden ejecutar este reset.</small>
+            </form>
+        </div>
+        <div id="security-msg" style="margin-top:12px;color:#0f766e;font-weight:600;"></div>
+    </div>
     <!-- USERS -->
     <div id="content-users" class="tab-content" style="display: none;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
@@ -252,6 +284,55 @@
         if (tab === 'users') loadUsers();
         if (tab === 'taxes') loadTaxes();
         if (tab === 'backup') loadBackupFiles();
+        if (tab === 'security') document.getElementById('security-msg').textContent = '';
+    }
+
+    // --- Security ---
+    async function changeOwnPass(e) {
+        e.preventDefault();
+        const curr = document.getElementById('curr-pass').value;
+        const n1 = document.getElementById('new-pass').value;
+        const n2 = document.getElementById('new-pass-2').value;
+        if (n1 !== n2) return showSecurityMsg('Las claves no coinciden', true);
+        const data = new FormData();
+        data.append('current_password', curr);
+        data.append('new_password', n1);
+        const res = await fetch('/api/users/change-password', { method: 'POST', body: data });
+        if (res.ok) {
+            showSecurityMsg('Clave actualizada. Vuelve a iniciar sesión.', false);
+            setTimeout(() => window.location = '/logout', 1200);
+        } else {
+            const txt = await res.text();
+            showSecurityMsg(extractErr(txt), true);
+        }
+    }
+
+    async function resetUserPass(e) {
+        e.preventDefault();
+        const uid = document.getElementById('reset-user-id').value;
+        const pwd = document.getElementById('reset-pass').value;
+        const data = new FormData();
+        data.append('new_password', pwd);
+        const res = await fetch(`/api/users/${uid}/reset-password`, { method: 'POST', body: data });
+        if (res.ok) {
+            showSecurityMsg('Clave reseteada para el usuario ID ' + uid, false);
+        } else {
+            const txt = await res.text();
+            showSecurityMsg(extractErr(txt), true);
+        }
+    }
+
+    function prefillReset(id, username) {
+        document.getElementById('reset-user-id').value = id;
+        document.getElementById('reset-pass').focus();
+        showSecurityMsg('Resetearás la clave de ' + username, false);
+        switchTab('security');
+    }
+
+    function showSecurityMsg(msg, isError) {
+        const el = document.getElementById('security-msg');
+        el.style.color = isError ? '#b91c1c' : '#0f766e';
+        el.textContent = msg;
     }
 
     // --- Users ---
@@ -265,13 +346,16 @@
                 <td>${u.full_name || '-'}</td>
                 <td><span class="badge ${u.role === 'admin' ? 'admin' : ''}">${u.role}</span></td>
                 <td>
-                    ${u.role !== 'admin' || u.id !== currentUserId ? `
-                    <button onclick="deleteUser(${u.id})" style="color: red; border:none; background:none; cursor:pointer;">Eliminar</button>
-                    ` : ''}
-                </td>
-            </tr>
-        `).join('');
-    }
+            ${u.role !== 'admin' || u.id !== currentUserId ? `
+            <button onclick="deleteUser(${u.id})" style="color: red; border:none; background:none; cursor:pointer;">Eliminar</button>
+            ` : ''}
+            ${u.id !== currentUserId ? `
+            <button onclick="prefillReset(${u.id}, '${"${"}{u.username}"}')" style="margin-left:8px; border:none; background:none; color:#0f766e; cursor:pointer;">Reset clave</button>
+            ` : ''}
+        </td>
+    </tr>
+`).join('');
+}
 
     function openUserModal() { document.getElementById('user-modal').style.display = 'flex'; }
 
