@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from sqlmodel import Session, delete, select
 
-from database.models import Client, Product, Sale, Settings, User, Tenant, SaleItem, CashMovement, Supplier, Payment, Purchase
+from database.models import Client, Product, Sale, Settings, User, Tenant, SaleItem, CashMovement, Supplier, Payment, Purchase, AICredential
 from database.session import get_session
 from services.auth_service import AuthService
 from services.database_backup_service import create_backup_file, get_local_backup_path, list_local_backups
@@ -24,6 +24,7 @@ from services.tenant_backup_service import export_tenant_snapshot, restore_tenan
 from services.purchase_service import PurchaseService
 from web.dependencies import get_settings, get_tenant, require_auth, require_superadmin
 from sqlmodel import func, col
+import requests
 
 router = APIRouter()
 
@@ -209,6 +210,37 @@ def admin_reset_password(
     return {"status": "ok"}
 
 
+@router.get("/api/ai/key")
+def get_ai_key(
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    cred = session.exec(select(AICredential).where(AICredential.tenant_id == tenant_id)).first()
+    return {"exists": bool(cred), "provider": cred.provider if cred else None}
+
+
+@router.post("/api/ai/key")
+def set_ai_key(
+    api_key: str = Form(...),
+    provider: str = Form("gemini"),
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+    cred = session.exec(select(AICredential).where(AICredential.tenant_id == tenant_id)).first()
+    if cred:
+        cred.api_key = api_key.strip()
+        cred.provider = provider
+    else:
+        cred = AICredential(tenant_id=tenant_id, api_key=api_key.strip(), provider=provider)
+    session.add(cred)
+    session.commit()
+    return {"status": "ok"}
+
+
 # --- Reports & Metrics ---
 
 def _parse_date(date_str: Optional[str]) -> Optional[date]:
@@ -350,6 +382,64 @@ def reports_summary(
         "client_balances": client_balances,
         "supplier_balances": supplier_balances,
     }
+
+
+@router.post("/api/ai/chat")
+def ai_chat(
+    payload: dict,
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    question = (payload.get("question") or "").strip()
+    if not question:
+        raise HTTPException(400, "Pregunta vacía")
+
+    cred = session.exec(select(AICredential).where(AICredential.tenant_id == tenant_id)).first()
+    if not cred or not cred.api_key:
+        raise HTTPException(400, "Configura tu API key de Gemini en Configuración > IA")
+
+    # Contexto breve: ventas últimas 7 días, top 3 productos, caja hoy
+    today = date.today()
+    start_dt = today - timedelta(days=6)
+    summary = reports_summary(
+        start_date=start_dt.isoformat(),
+        end_date=today.isoformat(),
+        export=None,
+        session=session,
+        user=user,
+        tenant_id=tenant_id,
+    )
+
+    system_prompt = (
+        "Eres un asistente financiero y de stock. Responde en español, conciso (máx 120 palabras). "
+        "Nunca inventes datos; usa solo los números provistos. Si falta algo, pide rango de fechas o datos."
+    )
+    context = {
+        "empresa": session.exec(select(Settings).where(Settings.tenant_id == tenant_id)).first().company_name,
+        "usuario": user.username,
+        "rol": user.role,
+        "kpis": summary,
+    }
+
+    try:
+        res = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={cred.api_key}",
+            json={
+                "contents": [
+                    {"role": "user", "parts": [{"text": system_prompt}]},
+                    {"role": "user", "parts": [{"text": f"Contexto: {json.dumps(context)}"}]},
+                    {"role": "user", "parts": [{"text": question}]},
+                ]
+            },
+            timeout=8,
+        )
+        res.raise_for_status()
+        data = res.json()
+        text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        return {"answer": text.strip()}
+    except Exception as exc:
+        raise HTTPException(500, f"No se pudo obtener respuesta: {exc}")
 
 
 # --- Tenants (Superadmin only) ---

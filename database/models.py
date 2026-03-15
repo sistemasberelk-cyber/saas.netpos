@@ -160,6 +160,13 @@ class BusinessConfig(SQLModel, table=True):
     
     is_active: bool = Field(default=True)
 
+# --- AI Credentials per tenant ---
+class AICredential(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: int = Field(foreign_key="tenant.id", unique=True, index=True)
+    provider: str = Field(default="gemini")
+    api_key: str
+
 # ==========================================
 # NEW MODULE: PURCHASING & CASH MANAGEMENT
 # ==========================================

@@ -35,6 +35,10 @@
             style="padding: 12px 24px; font-weight: 500; border-bottom: 2px solid transparent; color: #666; background: none; cursor: pointer;">
             Seguridad
         </button>
+        <button onclick="switchTab('ai')" id="tab-ai" class="tab-btn"
+            style="padding: 12px 24px; font-weight: 500; border-bottom: 2px solid transparent; color: #666; background: none; cursor: pointer;">
+            IA
+        </button>
     </div>
 
     <!-- GENERAL SETTINGS -->
@@ -73,6 +77,19 @@
 
             <button type="submit" class="btn" style="margin-top: 24px;">Guardar Cambios</button>
         </form>
+    </div>
+
+    <!-- AI -->
+    <div id="content-ai" class="tab-content" style="display: none;">
+        <h3 style="margin-bottom: 12px;">Asistente IA (Gemini Flash)</h3>
+        <p>Guarda la API key de Gemini para este tenant y prueba el asistente.</p>
+        <form id="ai-key-form" onsubmit="saveAIKey(event)" style="max-width: 400px;">
+            <label>API Key de Gemini</label>
+            <input type="password" id="ai-key" required placeholder="AIza...">
+            <button type="submit" class="btn" style="margin-top: 8px;">Guardar</button>
+            <button type="button" class="btn btn-secondary" style="margin-top: 8px; margin-left: 8px;" onclick="testAI()">Probar con ejemplo</button>
+        </form>
+        <div id="ai-key-msg" style="margin-top: 12px; color:#0f766e; font-weight:600;"></div>
     </div>
 
     <!-- SECURITY -->
@@ -285,6 +302,7 @@
         if (tab === 'taxes') loadTaxes();
         if (tab === 'backup') loadBackupFiles();
         if (tab === 'security') document.getElementById('security-msg').textContent = '';
+        if (tab === 'ai') loadAIKey();
     }
 
     // --- Security ---
@@ -333,6 +351,50 @@
         const el = document.getElementById('security-msg');
         el.style.color = isError ? '#b91c1c' : '#0f766e';
         el.textContent = msg;
+    }
+
+    // --- AI ---
+    async function loadAIKey() {
+        const res = await fetch('/api/ai/key');
+        const data = await res.json();
+        const msg = document.getElementById('ai-key-msg');
+        msg.style.color = '#0f766e';
+        msg.textContent = data.exists ? 'API key cargada para este tenant.' : 'Aún no configurada.';
+    }
+
+    async function saveAIKey(e) {
+        e.preventDefault();
+        const key = document.getElementById('ai-key').value;
+        const fd = new FormData();
+        fd.append('api_key', key);
+        const res = await fetch('/api/ai/key', { method: 'POST', body: fd });
+        const msg = document.getElementById('ai-key-msg');
+        if (res.ok) {
+            msg.style.color = '#0f766e';
+            msg.textContent = 'Guardada. El asistente ya puede responder.';
+            document.getElementById('ai-key').value = '';
+        } else {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Error al guardar';
+        }
+    }
+
+    async function testAI() {
+        const msgBox = document.getElementById('ai-key-msg');
+        try {
+            const res = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: 'Dame un resumen de ventas de los últimos 7 días' })
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            msgBox.style.color = '#0f766e';
+            msgBox.textContent = 'Respuesta: ' + data.answer;
+        } catch (err) {
+            msgBox.style.color = '#b91c1c';
+            msgBox.textContent = 'Error: ' + err.message;
+        }
     }
 
     // --- Users ---

@@ -52,5 +52,62 @@
     </div>
 
     {% block scripts %}{% endblock %}
+    <div id="ai-widget" style="position: fixed; bottom: 20px; right: 20px; z-index: 1000;">
+        <button id="ai-toggle" class="btn" style="border-radius: 999px; padding: 12px 16px;">Asistente IA</button>
+        <div id="ai-panel" style="display:none; width: 340px; max-height: 60vh; background: white; border: 1px solid #e5e7eb; box-shadow: 0 10px 30px rgba(0,0,0,0.2); border-radius: 16px; overflow: hidden;">
+            <div style="padding: 12px; background: #0f766e; color: white; display:flex; justify-content: space-between; align-items: center;">
+                <strong>Asistente IA</strong>
+                <button onclick="toggleAI(false)" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;">×</button>
+            </div>
+            <div id="ai-messages" style="padding: 12px; height: 240px; overflow-y: auto; font-size: 0.9rem;"></div>
+            <div style="padding: 12px; border-top: 1px solid #e5e7eb;">
+                <textarea id="ai-input" rows="2" style="width: 100%; resize: none;" placeholder="Pregúntame sobre ventas, stock, caja..."></textarea>
+                <button onclick="sendAI()" class="btn" style="margin-top: 8px; width: 100%;">Enviar</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        function toggleAI(forceClose) {
+            const p = document.getElementById('ai-panel');
+            p.style.display = forceClose ? 'none' : (p.style.display === 'none' ? 'block' : 'none');
+        }
+        document.getElementById('ai-toggle').addEventListener('click', () => toggleAI());
+        async function sendAI() {
+            const box = document.getElementById('ai-input');
+            const msg = box.value.trim();
+            if (!msg) return;
+            box.value = '';
+            appendAI('Tú', msg);
+            appendAI('...', 'Pensando...', true);
+            try {
+                const res = await fetch('/api/ai/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: msg })
+                });
+                if (!res.ok) throw new Error(await res.text());
+                const data = await res.json();
+                replaceLastAI(data.answer || 'Sin respuesta');
+            } catch (err) {
+                replaceLastAI('Error: ' + err.message);
+            }
+        }
+        function appendAI(from, text, isTemp=false) {
+            const wrap = document.getElementById('ai-messages');
+            const div = document.createElement('div');
+            div.className = 'ai-msg';
+            div.dataset.temp = isTemp ? '1' : '0';
+            div.innerHTML = `<strong>${from}:</strong> ${text}`;
+            wrap.appendChild(div);
+            wrap.scrollTop = wrap.scrollHeight;
+        }
+        function replaceLastAI(text) {
+            const wrap = document.getElementById('ai-messages');
+            const nodes = Array.from(wrap.querySelectorAll('.ai-msg'));
+            const temp = nodes.reverse().find(n => n.dataset.temp === '1');
+            if (temp) temp.innerHTML = `<strong>IA:</strong> ${text}`;
+            wrap.scrollTop = wrap.scrollHeight;
+        }
+    </script>
 </body>
 </html>
