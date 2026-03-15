@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Request, Form, status, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, Request, Form, status, UploadFile, File, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -7,7 +7,7 @@ from sqlmodel import Session, select, func, text, delete
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from typing import Optional, List
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 from io import BytesIO
 import os
 import io
@@ -780,21 +780,71 @@ def create_purchase_api(
 
 # --- Cash Book ---
 @app.get("/cash", response_class=HTMLResponse)
-def get_cash_book(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
-    # All cash movements limit 100
-    movements = session.exec(select(CashMovement).where(CashMovement.tenant_id == tenant_id).order_by(CashMovement.timestamp.desc()).limit(100)).all()
-    
-    # Calculate totals
-    # To be accurate we should use sum
-    total_in = session.exec(select(func.sum(CashMovement.amount)).where(CashMovement.tenant_id == tenant_id, CashMovement.movement_type == 'in')).one() or 0.0
-    total_out = session.exec(select(func.sum(CashMovement.amount)).where(CashMovement.tenant_id == tenant_id, CashMovement.movement_type == 'out')).one() or 0.0
-    
-    balance = float(total_in + total_out) # Out is negative
+def get_cash_book(
+    request: Request,
+    date_filter: Optional[str] = Query(None, alias="date"),
+    user: User = Depends(require_auth),
+    settings: Settings = Depends(get_settings),
+    tenant_id: int = Depends(get_tenant),
+    session: Session = Depends(get_session),
+):
+    try:
+        target_date = datetime.fromisoformat(date_filter).date() if date_filter else date.today()
+    except ValueError:
+        target_date = date.today()
 
-    return templates.TemplateResponse("cash_book.html", {
-        "request": request, "active_page": "cash", "settings": settings, "user": user, 
-        "movements": movements, "total_in": total_in, "total_out": abs(total_out), "balance": balance
-    })
+    day_start = datetime.combine(target_date, datetime.min.time())
+    day_end = day_start + timedelta(days=1)
+
+    movements = session.exec(
+        select(CashMovement)
+        .where(
+            CashMovement.tenant_id == tenant_id,
+            CashMovement.timestamp >= day_start,
+            CashMovement.timestamp < day_end,
+        )
+        .order_by(CashMovement.timestamp.desc())
+    ).all()
+
+    total_in = (
+        session.exec(
+            select(func.sum(CashMovement.amount)).where(
+                CashMovement.tenant_id == tenant_id,
+                CashMovement.timestamp >= day_start,
+                CashMovement.timestamp < day_end,
+                CashMovement.movement_type == "in",
+            )
+        ).one()
+        or 0.0
+    )
+    total_out = (
+        session.exec(
+            select(func.sum(CashMovement.amount)).where(
+                CashMovement.tenant_id == tenant_id,
+                CashMovement.timestamp >= day_start,
+                CashMovement.timestamp < day_end,
+                CashMovement.movement_type == "out",
+            )
+        ).one()
+        or 0.0
+    )
+
+    balance = float(total_in + total_out)  # Out is negative
+
+    return templates.TemplateResponse(
+        "cash_book.html",
+        {
+            "request": request,
+            "active_page": "cash",
+            "settings": settings,
+            "user": user,
+            "movements": movements,
+            "total_in": total_in,
+            "total_out": abs(total_out),
+            "balance": balance,
+            "selected_date": target_date.isoformat(),
+        },
+    )
 
 @app.post("/api/cash/movement")
 def create_cash_movement(movement_type: str = Form(...), amount: float = Form(...), concept: str = Form(...), session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
