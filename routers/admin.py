@@ -171,6 +171,7 @@ def list_tenants(
     user_counts = {}
     for u in users:
         user_counts[u.tenant_id] = user_counts.get(u.tenant_id, 0) + 1
+    settings = SettingsService.get_or_create_settings(session, tenant_id=user.tenant_id)
     return _templates().TemplateResponse(
         "tenants.html",
         {
@@ -178,6 +179,7 @@ def list_tenants(
             "user": user,
             "tenants": tenants,
             "user_counts": user_counts,
+            "settings": settings,
             "active_page": "tenants",
         },
     )
