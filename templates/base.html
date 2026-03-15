@@ -31,6 +31,7 @@
                 <a href="/sales" class="{% if active_page == 'sales' %}active{% endif %}">Ventas</a>
                 <a href="/picking" class="{% if active_page == 'picking' %}active{% endif %}">Picking</a>
                 {% if user and user.role == "admin" %}
+                <a href="/reports" class="{% if active_page == 'reports' %}active{% endif %}">Reportes</a>
                 <a href="/settings" class="{% if active_page == 'settings' %}active{% endif %}">Configuracion</a>
                 {% if user.tenant_id == 1 %}
                 <a href="/tenants" class="{% if active_page == 'tenants' %}active{% endif %}">Tenants</a>

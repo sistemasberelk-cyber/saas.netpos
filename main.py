@@ -80,7 +80,13 @@ from starlette.middleware.sessions import SessionMiddleware
 SESSION_SECRET = os.getenv("SECRET_KEY")
 if not SESSION_SECRET:
     raise RuntimeError("SECRET_KEY env var is required (set SECRET_KEY).")
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
+COOKIE_DOMAIN = os.getenv("COOKIE_DOMAIN")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    domain=COOKIE_DOMAIN or None,
+    same_site="lax",
+)
 
 @app.get("/login", response_class=HTMLResponse)
 @app.head("/login")
@@ -670,6 +676,8 @@ def create_supplier_api(
     user: User = Depends(require_auth),
     tenant_id: int = Depends(get_tenant)
 ):
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden crear proveedores")
     supplier = PurchaseService.create_supplier(session, tenant_id=tenant_id, name=name, phone=phone, email=email, address=address, cuit=cuit, notes=notes)
     return supplier
 
@@ -686,6 +694,8 @@ def update_supplier_api(
     user: User = Depends(require_auth),
     tenant_id: int = Depends(get_tenant)
 ):
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden editar proveedores")
     supplier = session.get(Supplier, id)
     if not supplier or supplier.tenant_id != tenant_id: raise HTTPException(404, "Not found")
     supplier.name = name
@@ -700,6 +710,8 @@ def update_supplier_api(
 
 @app.delete("/api/suppliers/{id}")
 def delete_supplier_api(id: int, session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden eliminar proveedores")
     supplier = session.get(Supplier, id)
     if not supplier or supplier.tenant_id != tenant_id: raise HTTPException(404, "Not found")
     session.delete(supplier)
@@ -726,6 +738,8 @@ def get_supplier_account(id: int, request: Request, user: User = Depends(require
 
 @app.post("/api/suppliers/{id}/pay")
 def register_supplier_payment(id: int, amount: float = Form(...), note: Optional[str] = Form(None), session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden registrar pagos a proveedores")
     supplier = session.get(Supplier, id)
     if not supplier or supplier.tenant_id != tenant_id: raise HTTPException(404, "Supplier not found")
     
@@ -759,6 +773,8 @@ def create_purchase_api(
     user: User = Depends(require_auth),
     tenant_id: int = Depends(get_tenant),
 ):
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden cargar compras")
     supplier = session.get(Supplier, payload.supplier_id)
     if not supplier or supplier.tenant_id != tenant_id:
         raise HTTPException(404, "Supplier not found")

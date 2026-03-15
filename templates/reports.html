@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Reportes{% endblock %}
+{% block content %}
+<section class="glass-card" style="margin-bottom: 16px;">
+    <div class="card-header">
+        <div>
+            <h2 style="margin: 0;">Reportes y métricas</h2>
+            <p style="margin: 4px 0 0;">Agregados rápidos: ventas diarias, top productos, caja y saldos.</p>
+        </div>
+        <div class="filters">
+            <label>Rango</label>
+            <select id="preset-range">
+                <option value="7">Últimos 7 días</option>
+                <option value="30" selected>Últimos 30 días</option>
+                <option value="custom">Personalizado</option>
+            </select>
+            <input type="date" id="start-date" style="display:none;">
+            <input type="date" id="end-date" style="display:none;">
+            <button id="refresh-btn" class="btn">Actualizar</button>
+            <button id="export-xlsx" class="btn-secondary">Exportar Excel</button>
+        </div>
+    </div>
+</section>
+
+<div class="reports-grid">
+    <div class="glass-card">
+        <h3>Ventas diarias</h3>
+        <table class="simple-table" id="tbl-sales">
+            <thead><tr><th>Día</th><th>Total</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <div class="glass-card">
+        <h3>Top productos</h3>
+        <table class="simple-table" id="tbl-top-products">
+            <thead><tr><th>Producto</th><th>Uds</th><th>Monto</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <div class="glass-card">
+        <h3>Movimiento de caja</h3>
+        <table class="simple-table" id="tbl-cash">
+            <thead><tr><th>Día</th><th>Ingresos</th><th>Egresos</th><th>Balance</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <div class="glass-card">
+        <h3>Saldos</h3>
+        <table class="simple-table" id="tbl-balances">
+            <thead><tr><th>Tipo</th><th>Nombre</th><th>Saldo</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const preset = document.getElementById('preset-range');
+const startInput = document.getElementById('start-date');
+const endInput = document.getElementById('end-date');
+
+function formatCurrency(val) {
+    return new Intl.NumberFormat('es-AR', {style: 'currency', currency: 'ARS'}).format(val || 0);
+}
+
+function updatePresetVisibility() {
+    const isCustom = preset.value === 'custom';
+    startInput.style.display = isCustom ? 'inline-block' : 'none';
+    endInput.style.display = isCustom ? 'inline-block' : 'none';
+    if (!isCustom) {
+        const days = Number(preset.value);
+        const end = new Date();
+        const start = new Date();
+        start.setDate(end.getDate() - days + 1);
+        startInput.valueAsDate = start;
+        endInput.valueAsDate = end;
+    }
+}
+
+async function loadReport(exportFormat) {
+    const params = new URLSearchParams();
+    if (startInput.value) params.append('start_date', startInput.value);
+    if (endInput.value) params.append('end_date', endInput.value);
+    if (exportFormat) params.append('export', exportFormat);
+
+    if (exportFormat === 'xlsx') {
+        window.location = `/api/reports/summary?${params.toString()}`;
+        return;
+    }
+
+    const res = await fetch(`/api/reports/summary?${params.toString()}`);
+    if (!res.ok) {
+        alert('No se pudo cargar el reporte');
+        return;
+    }
+    const data = await res.json();
+    renderTable('tbl-sales', data.sales_by_day, row => `
+        <tr><td>${row.day}</td><td>${formatCurrency(row.total)}</td></tr>
+    `);
+    renderTable('tbl-top-products', data.top_products, row => `
+        <tr><td>${row.product_name}</td><td>${row.units}</td><td>${formatCurrency(row.amount)}</td></tr>
+    `);
+    renderTable('tbl-cash', data.cash_by_day, row => `
+        <tr><td>${row.day}</td><td>${formatCurrency(row.ingresos)}</td><td>${formatCurrency(row.egresos)}</td><td>${formatCurrency(row.balance)}</td></tr>
+    `);
+    const balances = [
+        ...(data.client_balances || []).map(b => ({...b, tipo: 'Cliente'})),
+        ...(data.supplier_balances || []).map(b => ({...b, tipo: 'Proveedor'})),
+    ];
+    renderTable('tbl-balances', balances, row => `
+        <tr><td>${row.tipo}</td><td>${row.name}</td><td>${formatCurrency(row.balance)}</td></tr>
+    `);
+}
+
+function renderTable(id, rows, tplFn) {
+    const body = document.querySelector(`#${id} tbody`);
+    body.innerHTML = rows.length ? rows.map(tplFn).join('') : '<tr><td colspan="4">Sin datos</td></tr>';
+}
+
+document.getElementById('refresh-btn').addEventListener('click', () => loadReport());
+document.getElementById('export-xlsx').addEventListener('click', () => loadReport('xlsx'));
+preset.addEventListener('change', updatePresetVisibility);
+
+updatePresetVisibility();
+loadReport();
+</script>
+{% endblock %}

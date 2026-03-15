@@ -6,20 +6,24 @@ import os
 import uuid
 from io import BytesIO
 from typing import Optional
+from datetime import datetime, date, timedelta
+from sqlalchemy import case
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from sqlmodel import Session, delete, select
 
-from database.models import Client, Product, Sale, Settings, User, Tenant
+from database.models import Client, Product, Sale, Settings, User, Tenant, SaleItem, CashMovement, Supplier, Payment, Purchase
 from database.session import get_session
 from services.auth_service import AuthService
 from services.database_backup_service import create_backup_file, get_local_backup_path, list_local_backups
 from services.migration_service import run_schema_migrations
 from services.settings_service import SettingsService
 from services.tenant_backup_service import export_tenant_snapshot, restore_tenant_snapshot
+from services.purchase_service import PurchaseService
 from web.dependencies import get_settings, get_tenant, require_auth, require_superadmin
+from sqlmodel import func, col
 
 router = APIRouter()
 
@@ -156,6 +160,149 @@ def delete_user(
     session.delete(target)
     session.commit()
     return {"ok": True}
+
+
+# --- Reports & Metrics ---
+
+def _parse_date(date_str: Optional[str]) -> Optional[date]:
+    if not date_str:
+        return None
+    try:
+        return datetime.fromisoformat(date_str).date()
+    except Exception:
+        return None
+
+
+@router.get("/reports", response_class=HTMLResponse)
+def reports_page(
+    request: Request,
+    user: User = Depends(require_auth),
+    settings: Settings = Depends(get_settings),
+):
+    SettingsService.ensure_admin(user)
+    return _templates().TemplateResponse(
+        "reports.html",
+        {"request": request, "user": user, "settings": settings, "active_page": "reports"},
+    )
+
+
+@router.get("/api/reports/summary")
+def reports_summary(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    export: Optional[str] = None,
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant),
+):
+    SettingsService.ensure_admin(user)
+
+    end_dt = _parse_date(end_date) or date.today()
+    start_dt = _parse_date(start_date) or (end_dt - timedelta(days=29))
+    start_ts = datetime.combine(start_dt, datetime.min.time())
+    end_ts = datetime.combine(end_dt + timedelta(days=1), datetime.min.time())
+
+    sales_rows = session.exec(
+        select(
+            func.date(Sale.timestamp).label("day"),
+            func.sum(Sale.total_amount).label("total"),
+        )
+        .where(Sale.tenant_id == tenant_id, Sale.timestamp >= start_ts, Sale.timestamp < end_ts)
+        .group_by(func.date(Sale.timestamp))
+        .order_by(func.date(Sale.timestamp))
+    ).all()
+    sales_by_day = [{"day": str(r.day), "total": float(r.total or 0)} for r in sales_rows]
+
+    top_rows = session.exec(
+        select(
+            SaleItem.product_name.label("product_name"),
+            func.sum(SaleItem.quantity).label("units"),
+            func.sum(SaleItem.total).label("amount"),
+        )
+        .join(Sale, Sale.id == SaleItem.sale_id)
+        .where(Sale.tenant_id == tenant_id, Sale.timestamp >= start_ts, Sale.timestamp < end_ts)
+        .group_by(SaleItem.product_name)
+        .order_by(func.sum(SaleItem.total).desc())
+        .limit(10)
+    ).all()
+    top_products = [
+        {
+            "product_name": r.product_name,
+            "units": int(r.units or 0),
+            "amount": float(r.amount or 0),
+        }
+        for r in top_rows
+    ]
+
+    cash_rows = session.exec(
+        select(
+            func.date(CashMovement.timestamp).label("day"),
+            func.sum(case((CashMovement.movement_type == "in", CashMovement.amount), else_=0)).label("ingresos"),
+            func.sum(case((CashMovement.movement_type == "out", CashMovement.amount), else_=0)).label("egresos"),
+        )
+        .where(CashMovement.tenant_id == tenant_id, CashMovement.timestamp >= start_ts, CashMovement.timestamp < end_ts)
+        .group_by(func.date(CashMovement.timestamp))
+        .order_by(func.date(CashMovement.timestamp))
+    ).all()
+    cash_by_day = []
+    for r in cash_rows:
+        ingresos = float(r.ingresos or 0)
+        egresos = float(abs(r.egresos or 0))
+        cash_by_day.append(
+            {"day": str(r.day), "ingresos": ingresos, "egresos": egresos, "balance": ingresos - egresos}
+        )
+
+    # Client balances
+    client_sales = session.exec(
+        select(Sale.client_id, func.sum(Sale.total_amount).label("total"))
+        .where(Sale.tenant_id == tenant_id)
+        .group_by(Sale.client_id)
+    ).all()
+    client_sales_map = {row.client_id: float(row.total or 0) for row in client_sales if row.client_id}
+    client_payments = session.exec(
+        select(Payment.client_id, func.sum(Payment.amount).label("total"))
+        .where(Payment.tenant_id == tenant_id)
+        .group_by(Payment.client_id)
+    ).all()
+    client_pay_map = {row.client_id: float(row.total or 0) for row in client_payments if row.client_id}
+    clients = session.exec(select(Client).where(Client.tenant_id == tenant_id)).all()
+    client_balances = []
+    for client in clients:
+        sales_total = client_sales_map.get(client.id, 0.0)
+        paid_total = client_pay_map.get(client.id, 0.0)
+        balance = float(sales_total - paid_total)
+        client_balances.append({"name": client.name, "balance": balance})
+
+    suppliers = session.exec(select(Supplier).where(Supplier.tenant_id == tenant_id)).all()
+    supplier_balances = [
+        {"name": s.name, "balance": PurchaseService.get_supplier_balance(session, tenant_id, s.id)}
+        for s in suppliers
+    ]
+
+    if export and export.lower() == "xlsx":
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            pd.DataFrame(sales_by_day).to_excel(writer, index=False, sheet_name="ventas_diarias")
+            pd.DataFrame(top_products).to_excel(writer, index=False, sheet_name="top_productos")
+            pd.DataFrame(cash_by_day).to_excel(writer, index=False, sheet_name="caja")
+            pd.DataFrame(client_balances).to_excel(writer, index=False, sheet_name="clientes")
+            pd.DataFrame(supplier_balances).to_excel(writer, index=False, sheet_name="proveedores")
+        output.seek(0)
+        filename = f"reporte_{start_dt.isoformat()}_{end_dt.isoformat()}.xlsx"
+        return StreamingResponse(
+            output,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    return {
+        "range": {"start": start_dt.isoformat(), "end": end_dt.isoformat()},
+        "sales_by_day": sales_by_day,
+        "top_products": top_products,
+        "cash_by_day": cash_by_day,
+        "client_balances": client_balances,
+        "supplier_balances": supplier_balances,
+    }
 
 
 # --- Tenants (Superadmin only) ---
