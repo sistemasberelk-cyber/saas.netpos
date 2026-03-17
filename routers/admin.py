@@ -434,7 +434,7 @@ def ai_chat(
 
     try:
         res = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={cred.api_key}",
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={cred.api_key}",
             json={
                 "contents": [
                     {"role": "user", "parts": [{"text": system_prompt}]},
@@ -445,7 +445,7 @@ def ai_chat(
             timeout=10,
         )
         if res.status_code == 404:
-            raise HTTPException(400, "Revisa el modelo o la API key de Gemini (404). Usa gemini-1.5-flash-latest.")
+            raise HTTPException(400, "Revisa el modelo o la API key de Gemini (404). Usa gemini-2.0-flash-exp.")
         res.raise_for_status()
         data = res.json()
         text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
