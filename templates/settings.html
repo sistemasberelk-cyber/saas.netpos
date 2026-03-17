@@ -225,12 +225,17 @@
                 (.json.gz)</button>
             <a href="/api/backup" target="_blank" class="btn" style="text-decoration:none; background:#334155;">Descarga
                 rápida JSON</a>
+            <form id="restore-form" onsubmit="restoreBackup(event)" style="display:flex; gap:8px; align-items:center;">
+                <input type="file" id="restore-file" accept=".json,.gz" required>
+                <button type="submit" class="btn btn-secondary">Restaurar JSON/.gz</button>
+            </form>
         </div>
 
         <div id="backup-list"
             style="font-size: 0.9rem; color:#334155; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px;">
             Cargando backups...
         </div>
+        <div id="backup-msg" style="margin-top:8px; color:#0f766e; font-weight:600;"></div>
     </div>
 
 </div>
@@ -590,6 +595,32 @@
 
         alert(`Backup generado: ${payload.filename}`);
         loadBackupFiles();
+    }
+
+    async function restoreBackup(e) {
+        e.preventDefault();
+        const fileInput = document.getElementById('restore-file');
+        if (!fileInput.files.length) return;
+        const data = new FormData();
+        data.append('file', fileInput.files[0]);
+        const msg = document.getElementById('backup-msg');
+        msg.style.color = '#0f766e';
+        msg.textContent = 'Restaurando...';
+        try {
+            const res = await fetch('/api/admin/restore', { method: 'POST', body: data });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                msg.style.color = '#b91c1c';
+                msg.textContent = payload.error || payload.detail || 'Error al restaurar';
+            } else {
+                msg.style.color = '#0f766e';
+                msg.textContent = 'Restauración completa.';
+                loadBackupFiles();
+            }
+        } catch (err) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Error: ' + err;
+        }
     }
 </script>
 
