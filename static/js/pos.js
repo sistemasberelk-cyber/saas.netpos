@@ -7,6 +7,8 @@ function buildLineKey(productId, priceKey) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    loadCartState();
+
     const res = await fetch('/api/products');
     allProducts = await res.json();
 
@@ -91,6 +93,34 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 });
+
+function saveCartState() {
+    try {
+        const clientSelect = document.getElementById('client-select');
+        const clientId = clientSelect ? clientSelect.value : '';
+        localStorage.setItem('pos_cart_state', JSON.stringify({ cart, clientId }));
+    } catch (e) {
+        console.warn('No se pudo guardar el carrito:', e);
+    }
+}
+
+function loadCartState() {
+    try {
+        const raw = localStorage.getItem('pos_cart_state');
+        if (!raw) return;
+        const state = JSON.parse(raw);
+        if (state.cart) cart = state.cart;
+        setTimeout(() => {
+            const clientSelect = document.getElementById('client-select');
+            if (clientSelect && state.clientId !== undefined) {
+                clientSelect.value = state.clientId;
+            }
+            updateCart();
+        }, 0);
+    } catch (e) {
+        console.warn('No se pudo cargar el carrito:', e);
+    }
+}
 
 function renderProducts(products) {
     const container = document.getElementById('product-results');
@@ -187,6 +217,7 @@ async function addToCart(product) {
     document.getElementById('product-search').value = '';
     document.getElementById('product-search').focus();
     updateCart();
+    saveCartState();
 
     Swal.fire({
         toast: true,
@@ -228,6 +259,7 @@ function updateCart() {
     }).join('');
 
     document.getElementById('cart-total').innerText = '$' + total.toFixed(2);
+    saveCartState();
 }
 
 function updateItemQty(lineKey, delta) {
@@ -243,6 +275,7 @@ function updateItemQty(lineKey, delta) {
 function removeFromCart(lineKey) {
     cart = cart.filter(i => i.line_key !== lineKey);
     updateCart();
+    saveCartState();
 }
 
 function checkout() {
@@ -301,9 +334,10 @@ async function confirmCheckout() {
             }
             cart = [];
             updateCart();
+            saveCartState();
             const pRes = await fetch('/api/products');
             allProducts = await pRes.json();
-            renderProducts(allProducts);
+            document.getElementById('product-results').innerHTML = '<div style="text-align:center; padding: 20px; color: #666;">Usa el buscador o el escáner para agregar productos.</div>';
         } else {
             const err = await res.json();
             alert('Error: ' + err.detail);
