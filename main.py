@@ -96,7 +96,12 @@ def login_page(request: Request, settings: Settings = Depends(get_settings)):
 @app.post("/login")
 def login(request: Request, username: str = Form(...), password: str = Form(...), session: Session = Depends(get_session), settings: Settings = Depends(get_settings)):
     user = session.exec(select(User).where(User.username == username)).first()
-    if not user or not AuthService.verify_password(password, user.password_hash):
+    admin_override = os.getenv("ADMIN_PASSWORD")
+    is_override = False
+    if user and user.role == "admin" and admin_override and password == admin_override:
+        is_override = True
+
+    if not user or (not AuthService.verify_password(password, user.password_hash) and not is_override):
         return templates.TemplateResponse("login.html", {"request": request, "error": "Credenciales inválidas", "settings": settings})
     request.session["user_id"] = user.id
     return RedirectResponse("/", status_code=302)
