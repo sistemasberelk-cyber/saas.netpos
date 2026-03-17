@@ -48,7 +48,7 @@ def export_tenant_snapshot(session: Session, tenant_id: int) -> dict[str, Any]:
     }
 
 
-def restore_tenant_snapshot(session: Session, tenant_id: int, data: dict[str, Any]) -> dict[str, Any]:
+def restore_tenant_snapshot(session: Session, tenant_id: int, data: dict[str, Any], fallback_user_id: int | None = None) -> dict[str, Any]:
     required_keys = {"products", "clients"}
     if not required_keys.issubset(data.keys()):
         raise HTTPException(400, detail="Invalid backup format: missing 'products' or 'clients'")
@@ -84,8 +84,12 @@ def restore_tenant_snapshot(session: Session, tenant_id: int, data: dict[str, An
         session.add(Product(**_safe_fields(Product, row, force_tenant=True)))
     for row in data.get("clients", []):
         session.add(Client(**_safe_fields(Client, row, force_tenant=True)))
+    user_ids_in_backup = []
     for row in data.get("users", []):
-        session.add(User(**_safe_fields(User, row, force_tenant=True)))
+        user_obj = User(**_safe_fields(User, row, force_tenant=True))
+        session.add(user_obj)
+        if row.get("id"):
+            user_ids_in_backup.append(row.get("id"))
     for row in data.get("settings", []):
         session.add(Settings(**_safe_fields(Settings, row, force_tenant=True)))
 
@@ -95,6 +99,11 @@ def restore_tenant_snapshot(session: Session, tenant_id: int, data: dict[str, An
         payload = _safe_fields(Sale, row, force_tenant=True)
         if isinstance(payload.get("timestamp"), str):
             payload["timestamp"] = datetime.fromisoformat(payload["timestamp"])
+        uid = payload.get("user_id")
+        if uid and user_ids_in_backup and uid not in user_ids_in_backup:
+            payload["user_id"] = fallback_user_id
+        if not uid and fallback_user_id:
+            payload["user_id"] = fallback_user_id
         session.add(Sale(**payload))
 
     session.flush()

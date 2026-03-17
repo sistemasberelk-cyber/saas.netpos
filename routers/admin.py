@@ -579,7 +579,7 @@ async def restore_system_backup(
         raw_content = await file.read()
         content = gzip.decompress(raw_content) if file.filename and file.filename.endswith(".gz") else raw_content
         data = json.loads(content)
-        return restore_tenant_snapshot(session, tenant_id, data)
+        return restore_tenant_snapshot(session, tenant_id, data, fallback_user_id=user.id)
     except HTTPException:
         raise
     except Exception as exc:
