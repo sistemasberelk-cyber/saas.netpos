@@ -11,14 +11,13 @@ WORKDIR /app
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-# AGGRESSIVE FIX: Uninstall bcrypt if present to prevent passlib from using it
-RUN pip uninstall -y bcrypt || true
+
 
 # Copy Application Code
 COPY . .
 
-# Create directory for barcodes if not exists
-RUN mkdir -p static/barcodes && chmod 777 static/barcodes
+RUN mkdir -p static/barcodes static/product_images static/images backups \
+    && chmod 755 static/barcodes static/product_images backups
 
 # Expose Port (Render uses $PORT env var, but uvicorn needs explicit bind)
 EXPOSE 8000
