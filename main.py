@@ -114,6 +114,8 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     if not user or (not AuthService.verify_password(password, user.password_hash) and not is_override):
         return templates.TemplateResponse("login.html", {"request": request, "error": "Credenciales inválidas", "settings": settings})
     request.session["user_id"] = user.id
+    if user.role == "superadmin":
+        return RedirectResponse("/tenants", status_code=302)
     return RedirectResponse("/", status_code=302)
 
 @app.get("/logout")
@@ -126,6 +128,9 @@ def logout(request: Request):
 @app.get("/", response_class=HTMLResponse)
 @app.head("/")
 def get_dashboard(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings), tenant_id: int = Depends(get_tenant), session: Session = Depends(get_session)):
+    if user.role == "superadmin":
+        return RedirectResponse("/tenants", status_code=302)
+    
     total_products = session.exec(select(func.count(Product.id)).where(Product.tenant_id == tenant_id)).one()
     low_stock = session.exec(select(func.count(Product.id)).where(Product.tenant_id == tenant_id, Product.stock_quantity < Product.min_stock_level)).one()
     recent_sales = session.exec(select(Sale).where(Sale.tenant_id == tenant_id, Sale.is_closed == False).order_by(Sale.timestamp.desc()).limit(5)).all()
