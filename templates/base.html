@@ -21,6 +21,9 @@
                 <small>Cloud Retail</small>
             </a>
             <div class="nav-links">
+                {% if user and user.role == "superadmin" %}
+                <a href="/tenants" class="{% if active_page == 'tenants' %}active{% endif %}">Tenants Dashboard</a>
+                {% else %}
                 <a href="/" class="{% if active_page == 'home' %}active{% endif %}">Dashboard</a>
                 <a href="/products" class="{% if active_page == 'products' %}active{% endif %}">Productos</a>
                 <a href="/products/labels" class="{% if active_page == 'print_labels' %}active{% endif %}">Etiquetas</a>
@@ -35,6 +38,7 @@
                 <a href="/settings" class="{% if active_page == 'settings' %}active{% endif %}">Configuracion</a>
                 {% if user.tenant_id == 1 %}
                 <a href="/tenants" class="{% if active_page == 'tenants' %}active{% endif %}">Tenants</a>
+                {% endif %}
                 {% endif %}
                 {% endif %}
             </div>
