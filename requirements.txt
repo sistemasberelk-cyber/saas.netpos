@@ -1,5 +1,5 @@
 # Backend Requirements (v3 - cache bust)
-fastapi
+fastapi<0.104.0
 uvicorn[standard]
 sqlmodel
 python-multipart
