@@ -132,7 +132,8 @@ class StockService:
                 user_id=user_id,
                 amount=final_amount_paid,
                 movement_type="in",
-                description=f"Ingreso por Venta a {client_name} - Medio: {payment_method}"
+                concept=f"Ingreso por Venta a {client_name} - Medio: {payment_method}",
+                reference_type="sale"
             )
             session.add(cash_movement)
 
