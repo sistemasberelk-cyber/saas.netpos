@@ -77,7 +77,7 @@ def get_tenant(
 
 
 def require_superadmin(user: User = Depends(require_auth)) -> User:
-    if user.role != "admin" or user.tenant_id != 1:
+    if user.role != "superadmin":
         raise HTTPException(status_code=403, detail="Superadmin required")
     return user
 
