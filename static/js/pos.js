@@ -286,12 +286,29 @@ function checkout() {
     const total = cart.reduce((acc, item) => acc + (item.unit_price * item.quantity), 0);
 
     document.getElementById('modal-total-display').textContent = '$' + total.toFixed(2);
-    document.getElementById('modal-client-display').textContent = clientName;
-    document.getElementById('payment-amount').value = total.toFixed(2);
+    document.getElementById('pay-cash').value = total.toFixed(2);
+    document.getElementById('pay-transfer').value = "0.00";
+    document.getElementById('pay-account').value = "0.00";
     document.getElementById('payment-modal').style.display = 'flex';
-    document.getElementById('payment-amount').focus();
-    document.getElementById('payment-amount').select();
+    document.getElementById('pay-cash').focus();
+    document.getElementById('pay-cash').select();
 }
+
+function calcSplit() {
+    const totalText = document.getElementById('modal-total-display').textContent.replace('$', '');
+    const total = parseFloat(totalText);
+    let cash = parseFloat(document.getElementById('pay-cash').value) || 0;
+    let trans = parseFloat(document.getElementById('pay-transfer').value) || 0;
+    
+    let rem = total - (cash + trans);
+    if (rem < 0) rem = 0;
+    document.getElementById('pay-account').value = rem.toFixed(2);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Other listener already there, but we can safely attach here for the new split-pay inputs
+    document.querySelectorAll('.split-pay').forEach(inp => inp.addEventListener('input', calcSplit));
+});
 
 function closePaymentModal() {
     document.getElementById('payment-modal').style.display = 'none';
@@ -300,18 +317,22 @@ function closePaymentModal() {
 async function confirmCheckout() {
     const clientSelect = document.getElementById('client-select');
     const clientId = clientSelect ? clientSelect.value : null;
-    const amountPaid = parseFloat(document.getElementById('payment-amount').value);
-    const paymentMethod = document.getElementById('payment-method').value;
+    
+    calcSplit(); // ensure remainder is right
+    const cashPaid = parseFloat(document.getElementById('pay-cash').value) || 0;
+    const transPaid = parseFloat(document.getElementById('pay-transfer').value) || 0;
+    const accPaid = parseFloat(document.getElementById('pay-account').value) || 0;
+    const amountPaid = cashPaid + transPaid;
 
-    if (isNaN(amountPaid) || amountPaid < 0) {
-        return alert('Por favor ingrese un monto valido');
+    if (accPaid > 0 && !clientId) {
+        return alert('Para dejar saldo en Cuenta Corriente, debes seleccionar un Cliente registrado.');
     }
 
     const salesData = {
         items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
         client_id: clientId ? parseInt(clientId, 10) : null,
-        amount_paid: amountPaid,
-        payment_method: paymentMethod
+        split_cash: cashPaid,
+        split_transfer: transPaid
     };
 
     const btn = document.querySelector('#payment-modal .btn');
@@ -351,13 +372,7 @@ async function confirmCheckout() {
     }
 }
 
-function handlePaymentMethodChange() {
-    const method = document.getElementById('payment-method').value;
-    const totalText = document.getElementById('modal-total-display').innerText.replace('$', '');
-    const total = parseFloat(totalText);
-    const amountInput = document.getElementById('payment-amount');
-    amountInput.value = method === 'account' ? 0 : total.toFixed(2);
-}
+// Split payment logic handles inputs
 
 async function quickEditProduct(productId) {
     const product = allProducts.find(p => p.id === productId);

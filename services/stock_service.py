@@ -25,7 +25,7 @@ class StockService:
         code.save(full_path) # saves as filename.svg
         return f"{filename}.svg"
 
-    def process_sale(self, session: Session, user_id: int, tenant_id: int, items_data: List[dict], payment_method: str = "cash", client_id: Optional[int] = None, amount_paid: Optional[float] = None) -> Sale:
+    def process_sale(self, session: Session, user_id: int, tenant_id: int, items_data: List[dict], payment_method: str = "cash", client_id: Optional[int] = None, amount_paid: Optional[float] = None, split_cash: Optional[float] = None, split_transfer: Optional[float] = None) -> Sale:
         """
         Creates a Sale record and updates product stock.
         If client_id is provided and amount_paid > 0, creates a Payment record.
@@ -72,7 +72,23 @@ class StockService:
         sale.total_amount = total_sale
         
         # Payment Logic
-        final_amount_paid = amount_paid if amount_paid is not None else total_sale
+        if split_cash is not None or split_transfer is not None:
+            amt_cash = split_cash or 0.0
+            amt_transfer = split_transfer or 0.0
+            final_amount_paid = amt_cash + amt_transfer
+            if amt_cash > 0 and amt_transfer == 0:
+                sale.payment_method = "cash"
+            elif amt_transfer > 0 and amt_cash == 0:
+                sale.payment_method = "transfer"
+            elif amt_cash == 0 and amt_transfer == 0:
+                sale.payment_method = "cuenta_corriente"
+            else:
+                sale.payment_method = "combinado"
+        else:
+            final_amount_paid = amount_paid if amount_paid is not None else total_sale
+            amt_cash = final_amount_paid if payment_method == "cash" else 0.0
+            amt_transfer = final_amount_paid if payment_method == "transfer" else 0.0
+            sale.payment_method = payment_method
         
         # --- Credit Limit Check ---
         client = None
@@ -124,18 +140,22 @@ class StockService:
             session.add(payment)
             
         # Register in Cash Book
-        if final_amount_paid > 0 and payment_method != "cuenta_corriente":
+        if final_amount_paid > 0:
             from database.models import CashMovement
             client_name = client.name if client else "Consumidor Final"
-            cash_movement = CashMovement(
-                tenant_id=tenant_id,
-                user_id=user_id,
-                amount=final_amount_paid,
-                movement_type="in",
-                concept=f"Ingreso por Venta a {client_name} - Medio: {payment_method}",
-                reference_type="sale"
-            )
-            session.add(cash_movement)
+            
+            if amt_cash > 0:
+                session.add(CashMovement(
+                    tenant_id=tenant_id, user_id=user_id, amount=amt_cash,
+                    movement_type="in", concept=f"Ingreso por Venta a {client_name} - Medio: Efectivo",
+                    reference_type="sale"
+                ))
+            if amt_transfer > 0:
+                session.add(CashMovement(
+                    tenant_id=tenant_id, user_id=user_id, amount=amt_transfer,
+                    movement_type="in", concept=f"Ingreso por Venta a {client_name} - Medio: Transferencia",
+                    reference_type="sale"
+                ))
 
         session.commit()
         session.refresh(sale)

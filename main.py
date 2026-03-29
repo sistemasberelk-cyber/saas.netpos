@@ -915,6 +915,53 @@ def get_cash_book(
 
     balance = float(total_in + total_out)  # Out is negative
 
+    # --- Desglose (Breakdown) ---
+    day_sales = session.exec(
+        select(Sale).where(
+            Sale.tenant_id == tenant_id,
+            Sale.timestamp >= day_start,
+            Sale.timestamp < day_end
+        )
+    ).all()
+
+    breakdown = {
+        "cash": 0.0,
+        "transfer": 0.0,
+        "cuenta_corriente": 0.0
+    }
+    
+    for s in day_sales:
+        if s.payment_method == "cash":
+            breakdown["cash"] += (s.amount_paid or 0.0)
+        elif s.payment_method == "transfer":
+            breakdown["transfer"] += (s.amount_paid or 0.0)
+        elif s.payment_method == "combinado":
+            # Si fue combinado, intentamos obtener el mix usando la base CashMovement o asumiendo
+            # pero mejor aún, como insertamos 2 cash_movements en la caja, podemos escanear los items.
+            pass
+            
+        # Cuenta corriente siempre es la diferencia entre el total y el pago recibido
+        if s.total_amount > (s.amount_paid or 0):
+            breakdown["cuenta_corriente"] += (s.total_amount - (s.amount_paid or 0))
+
+    # To be extremely accurate without complex parsing, we extract 'cash' and 'transfer' 
+    # directly from the day's IN movements concept strings:
+    real_b_cash = 0.0
+    real_b_transfer = 0.0
+    for mov in movements:
+        if mov.movement_type == "in":
+            if "Medio: Efectivo" in mov.concept:
+                real_b_cash += mov.amount
+            elif "Medio: Transferencia" in mov.concept:
+                real_b_transfer += mov.amount
+            elif "Medio: cash" in mov.concept:
+                real_b_cash += mov.amount
+            elif "Medio: transfer" in mov.concept:
+                real_b_transfer += mov.amount
+
+    breakdown["cash"] = real_b_cash
+    breakdown["transfer"] = real_b_transfer
+
     return templates.TemplateResponse(
         "cash_book.html",
         {
@@ -927,6 +974,7 @@ def get_cash_book(
             "total_out": abs(total_out),
             "balance": balance,
             "selected_date": target_date.isoformat(),
+            "breakdown": breakdown,
         },
     )
 
@@ -958,7 +1006,9 @@ def create_sale_api(sale_data: dict, session: Session = Depends(get_session), us
             items_data=sale_data["items"], 
             client_id=sale_data.get("client_id"),
             amount_paid=sale_data.get("amount_paid"),
-            payment_method=sale_data.get("payment_method", "cash")
+            payment_method=sale_data.get("payment_method", "cash"),
+            split_cash=sale_data.get("split_cash"),
+            split_transfer=sale_data.get("split_transfer")
         )
         return sale
     except ValueError as e:

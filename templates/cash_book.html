@@ -41,6 +41,24 @@
         </div>
     </div>
 
+    <!-- Breakdown Section -->
+    {% if breakdown %}
+    <div style="display: flex; gap: 12px; margin-bottom: 32px; flex-wrap: wrap;">
+        <div style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb; background: #fafafa; min-width: 150px; text-align: center;">
+            <div style="color: #6b7280; font-size: 0.85em; font-weight: bold;">💵 EFECTIVO (INGRESÓ)</div>
+            <div style="font-size: 1.3em; font-weight: 800; color: #374151;">${{ breakdown.cash | round(2) }}</div>
+        </div>
+        <div style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb; background: #fafafa; min-width: 150px; text-align: center;">
+            <div style="color: #6b7280; font-size: 0.85em; font-weight: bold;">🏦 TRANSFERENCIA (INGRESÓ)</div>
+            <div style="font-size: 1.3em; font-weight: 800; color: #374151;">${{ breakdown.transfer | round(2) }}</div>
+        </div>
+        <div style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #fde68a; background: #fffbeb; min-width: 150px; text-align: center;">
+            <div style="color: #d97706; font-size: 0.85em; font-weight: bold;">📝 A COBRAR (CTA. CTE)</div>
+            <div style="font-size: 1.3em; font-weight: 800; color: #b45309;">${{ breakdown.cuenta_corriente | round(2) }}</div>
+        </div>
+    </div>
+    {% endif %}
+
     <h3>Libro de Movimientos (Últimos 100)</h3>
     <div class="table-container">
         <table>

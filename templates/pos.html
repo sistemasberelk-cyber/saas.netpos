@@ -119,26 +119,31 @@
             </div>
 
             <div style="margin-bottom: 20px;">
-                <label for="payment-method" style="display: block; margin-bottom: 8px; font-weight: bold;">Método de
-                    Pago:</label>
-                <select id="payment-method"
-                    style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; background: #fff; font-size: 1.1rem; margin-bottom: 15px;"
-                    onchange="handlePaymentMethodChange()">
-                    <option value="cash">Efectivo</option>
-                    <option value="transfer">Transferencia</option>
-                    <option value="account">Cuenta Corriente (Fiado)</option>
-                </select>
+                <label style="display: block; margin-bottom: 8px; font-weight: bold; font-size: 0.9em; color: #666;">PODÉS COMBINAR MÚLTIPLES MEDIOS DE PAGO</label>
 
-                <label for="payment-amount" style="display: block; margin-bottom: 8px; font-weight: bold;">Monto
-                    Abonado:</label>
-                <div
-                    style="display: flex; align-items: center; border: 1px solid #ccc; border-radius: 8px; padding: 0 12px; background: #f9fafb;">
-                    <span style="font-weight: bold; color: #666;">$</span>
-                    <input type="number" id="payment-amount" step="0.01"
-                        style="width: 100%; padding: 12px; border: none; background: transparent; font-size: 1.2rem; outline: none;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                    <label style="font-weight: bold; width: 120px;">💵 Efectivo:</label>
+                    <div style="display: flex; align-items: center; border: 1px solid #ccc; border-radius: 8px; padding: 0 8px; background: #fff; width: 180px;">
+                        <span style="font-weight: bold; color: #666;">$</span>
+                        <input type="number" id="pay-cash" class="split-pay" step="0.01" value="0" style="width: 100%; padding: 8px; border: none; background: transparent; font-size: 1.1rem; outline: none; text-align: right;">
+                    </div>
                 </div>
-                <small style="color: #666; display: block; margin-top: 4px;">Dejar vacío o igual al total para pago
-                    completo.</small>
+
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                    <label style="font-weight: bold; width: 120px;">🏦 Transf/Tarjeta:</label>
+                    <div style="display: flex; align-items: center; border: 1px solid #ccc; border-radius: 8px; padding: 0 8px; background: #fff; width: 180px;">
+                        <span style="font-weight: bold; color: #666;">$</span>
+                        <input type="number" id="pay-transfer" class="split-pay" step="0.01" value="0" style="width: 100%; padding: 8px; border: none; background: transparent; font-size: 1.1rem; outline: none; text-align: right;">
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                    <label style="font-weight: bold; width: 120px; color: #d97706;">📝 Cta. Corriente:</label>
+                    <div style="display: flex; align-items: center; border: 1px solid #fcd34d; border-radius: 8px; padding: 0 8px; background: #fffbeb; width: 180px;">
+                        <span style="font-weight: bold; color: #d97706;">$</span>
+                        <input type="number" id="pay-account" step="0.01" value="0" disabled style="width: 100%; padding: 8px; border: none; background: transparent; font-size: 1.1rem; outline: none; text-align: right; color: #d97706; font-weight: bold;">
+                    </div>
+                </div>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
