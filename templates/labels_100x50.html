@@ -25,11 +25,10 @@
         }
 
         .label-grid {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 20px;
+            display: block;
+            margin: 0 auto;
             padding: 20px;
+            max-width: 100mm;
         }
 
         .label {
@@ -39,10 +38,10 @@
             background: white;
             position: relative;
             overflow: hidden;
-            border: 1px dashed #ccc;
-            display: flex;
-            flex-direction: column;
+            display: block;
             padding: 4mm;
+            margin-bottom: 5mm;
+            border: 1px dashed #ccc;
         }
 
         .header {
@@ -170,14 +169,14 @@
     <div class="label-grid">
         {% for item in labels %}
         <div class="label">
-            <div class="header">
-                <div class="category">{{ item.category or '' }}</div>
+            <div class="header" style="text-align: right; margin-bottom: 2mm;">
+                <span class="category" style="float: right;">{{ item.category or '' }}</span>
             </div>
 
-            <div class="product-name">{{ item.name }}</div>
+            <div class="product-name" style="clear: both; width: 100%; text-align: center;">{{ item.name }}</div>
 
-            <div class="footer">
-                <div class="barcode-area">
+            <div class="footer-area" style="position: absolute; bottom: 4mm; left: 4mm; right: 4mm; display: flex; justify-content: space-between; align-items: flex-end;">
+                <div class="barcode-area" style="text-align: center;">
                     <img src="/static/barcodes/{{ item.barcode_file }}" class="barcode-img" alt="{{ item.barcode }}">
                     {% if item.item_number %}
                     <div class="item-number-badge">Art: {{ item.item_number }}</div>
@@ -185,7 +184,7 @@
                 </div>
 
                 {% if not hide_price %}
-                <div class="price-tag" style="margin-bottom: 2mm;">
+                <div class="price-tag">
                     <div class="price-label">Precio</div>
                     <div class="price-value">${{ "{:,.0f}".format(item.price) }}</div>
                 </div>
