@@ -615,6 +615,18 @@ async def print_labels(
             "h": 44,
             "hide_price": hide_price
         })
+    elif label_type == "100x50":
+        return templates.TemplateResponse("labels_100x50.html", {
+            "request": request, 
+            "labels": labels_to_print,
+            "hide_price": hide_price
+        })
+    elif label_type == "100x60":
+        return templates.TemplateResponse("labels_100x60.html", {
+            "request": request, 
+            "labels": labels_to_print,
+            "hide_price": hide_price
+        })
     else:
         # Standard configuration (Dynamic from Settings)
         return templates.TemplateResponse("print_layout.html", {
