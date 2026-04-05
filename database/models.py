@@ -213,13 +213,14 @@ class PurchaseItem(SQLModel, table=True):
     
     purchase: Optional[Purchase] = Relationship(back_populates="items")
 
+
 # --- Cash Movement (Libro de Caja) ---
 class CashMovement(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
     
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    movement_type: str = Field(index=True) # "in" (ingreso), "out" (egreso)
+    movement_type: str = Field(index=True) # "in" (ingreso), "out" (egreso), "cierre"
     amount: float
     concept: str # e.g. "Pago a proveedor X", "Retiro para flete", "Venta N", etc.
     
@@ -227,3 +228,71 @@ class CashMovement(SQLModel, table=True):
     reference_type: Optional[str] = None # "sale", "purchase", "manual"
     
     user_id: Optional[int] = Field(default=None, foreign_key="user.id")
+
+
+# ==========================================
+# WMS MODULE: DEPÓSITOS Y UBICACIONES
+# ==========================================
+
+# --- Depósito (almacén físico) ---
+class Location(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id", index=True)
+    
+    name: str = Field(index=True)           # "Depósito Central", "Depósito 2"
+    code: Optional[str] = None              # "DEP-1", "DEP-2"
+    address: Optional[str] = None           # Dirección física (opcional)
+    description: Optional[str] = None
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    bins: List["Bin"] = Relationship(back_populates="location")
+
+
+# --- Ubicación dentro del depósito (bin/slot) ---
+class Bin(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id", index=True)
+    location_id: int = Field(foreign_key="location.id", index=True)
+    
+    name: str                               # "A-1-B2" (código único legible)
+    aisle: Optional[str] = None             # Pasillo / Fila: "A"
+    shelf: Optional[str] = None             # Estante: "1"
+    position: Optional[str] = None         # Posición: "B2"
+    max_capacity: Optional[int] = None      # Unidades máximas (None = sin límite)
+    description: Optional[str] = None
+    is_active: bool = Field(default=True)
+    
+    location: Optional[Location] = Relationship(back_populates="bins")
+    stock_entries: List["BinStock"] = Relationship(back_populates="bin")
+
+
+# --- Stock por ubicación (tabla pivote producto-bin) ---
+class BinStock(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
+    bin_id: int = Field(foreign_key="bin.id", index=True)
+    product_id: int = Field(foreign_key="product.id", index=True)
+    
+    quantity: int = Field(default=0)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    bin: Optional[Bin] = Relationship(back_populates="stock_entries")
+
+
+# --- Historial de movimientos de stock entre ubicaciones ---
+class StockMovement(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id", index=True)
+    
+    product_id: int = Field(foreign_key="product.id")
+    from_bin_id: Optional[int] = Field(default=None, foreign_key="bin.id")  # None = ingreso externo
+    to_bin_id: Optional[int] = Field(default=None, foreign_key="bin.id")    # None = salida/venta
+    
+    quantity: int
+    reason: Optional[str] = None    # "ingreso", "transferencia", "ajuste", "venta"
+    notes: Optional[str] = None
+    
+    user_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
