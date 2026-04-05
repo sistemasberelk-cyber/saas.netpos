@@ -183,12 +183,10 @@
                     {% endif %}
                 </div>
 
-                {% if not hide_price %}
-                <div class="price-tag">
+                <div class="price-tag" {% if hide_price %}style="visibility:hidden;"{% endif %}>
                     <div class="price-label">Precio</div>
                     <div class="price-value">${{ "{:,.0f}".format(item.price) }}</div>
                 </div>
-                {% endif %}
             </div>
         </div>
         {% endfor %}
