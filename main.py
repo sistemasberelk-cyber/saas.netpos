@@ -25,6 +25,7 @@ from services.stock_service import StockService
 from services.auth_service import AuthService
 from routers.admin import router as admin_router
 from routers.picking import router as picking_router
+from routers.wms import router as wms_router
 from web.dependencies import get_current_user, get_settings, get_tenant, require_auth
 import barcode
 from barcode.writer import ImageWriter
@@ -70,10 +71,10 @@ def health_check():
     return {"status": "ok"}
 
 
-# Mount Static Files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(admin_router)
 app.include_router(picking_router)
+app.include_router(wms_router)
 
 # --- Auth Routes ---
 

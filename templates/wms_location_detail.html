@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block title %}{{ location.name }}{% endblock %}
+
+{% block content %}
+<div class="glass-card">
+  <!-- Header -->
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
+    <div>
+      <a href="/wms/depositos" style="font-size:13px; color:#6b7280; text-decoration:none;">← Depósitos</a>
+      <h2 style="margin:4px 0 0;">🏭 {{ location.name }}</h2>
+      {% if location.address %}<div style="font-size:13px; color:#9ca3af;">📍 {{ location.address }}</div>{% endif %}
+    </div>
+    <button onclick="document.getElementById('modal-nueva-ub').style.display='flex'"
+      style="background:#059669; color:#fff; border:none; padding:10px 20px; border-radius:8px; font-weight:700; cursor:pointer; font-size:15px;">
+      + Nueva Ubicación
+    </button>
+  </div>
+
+  <!-- Tabla de ubicaciones -->
+  {% if bins_data %}
+  <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:14px;">
+      <thead>
+        <tr style="background:#f9fafb; border-bottom:2px solid #e5e7eb;">
+          <th style="padding:12px 16px; text-align:left; font-weight:700; color:#374151;">Ubicación</th>
+          <th style="padding:12px 16px; text-align:left; font-weight:700; color:#374151;">Pasillo / Estante</th>
+          <th style="padding:12px 16px; text-align:center; font-weight:700; color:#374151;">Productos</th>
+          <th style="padding:12px 16px; text-align:center; font-weight:700; color:#374151;">Unidades</th>
+          <th style="padding:12px 16px; text-align:center; font-weight:700; color:#374151;">Cap. Máx.</th>
+          <th style="padding:12px 16px; text-align:center; font-weight:700; color:#374151;">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in bins_data %}
+        <tr style="border-bottom:1px solid #f3f4f6; {% if not item.bin.is_active %}opacity:.5;{% endif %}">
+          <td style="padding:12px 16px; font-weight:800; color:#111827;">
+            {{ item.bin.name }}
+            {% if not item.bin.is_active %}<span style="font-size:11px; color:#ef4444; font-weight:600;"> (inactivo)</span>{% endif %}
+          </td>
+          <td style="padding:12px 16px; color:#6b7280;">
+            {% if item.bin.aisle %}Pasillo {{ item.bin.aisle }}{% endif %}
+            {% if item.bin.shelf %} / Est. {{ item.bin.shelf }}{% endif %}
+            {% if item.bin.position %} / Pos. {{ item.bin.position }}{% endif %}
+          </td>
+          <td style="padding:12px 16px; text-align:center;">
+            <span style="background:#eff6ff; color:#1d4ed8; padding:3px 10px; border-radius:999px; font-weight:700; font-size:13px;">
+              {{ item.stock | length }}
+            </span>
+          </td>
+          <td style="padding:12px 16px; text-align:center; font-weight:800; color:#059669; font-size:16px;">
+            {{ item.total_units }}
+          </td>
+          <td style="padding:12px 16px; text-align:center; color:#6b7280;">
+            {{ item.bin.max_capacity or '∞' }}
+          </td>
+          <td style="padding:12px 16px; text-align:center;">
+            <button onclick="toggleStockPanel({{ item.bin.id }})"
+                    style="background:#f3f4f6; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;">
+              Ver stock
+            </button>
+          </td>
+        </tr>
+        <!-- Panel de stock expandible -->
+        <tr id="stock-panel-{{ item.bin.id }}" style="display:none; background:#f9fafb;">
+          <td colspan="6" style="padding:12px 24px;">
+            {% if item.stock %}
+            <table style="width:100%; font-size:13px; border-collapse:collapse;">
+              <thead>
+                <tr style="color:#6b7280; font-weight:600;">
+                  <th style="padding:6px 8px; text-align:left;">Producto</th>
+                  <th style="padding:6px 8px; text-align:left;">Artículo</th>
+                  <th style="padding:6px 8px; text-align:center;">Cantidad</th>
+                  <th style="padding:6px 8px; text-align:center;">Ajustar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for entry in item.stock %}
+                <tr style="border-top:1px solid #e5e7eb;">
+                  <td style="padding:6px 8px; font-weight:600;">{{ entry.product.name }}</td>
+                  <td style="padding:6px 8px; color:#6b7280;">{{ entry.product.item_number or '—' }}</td>
+                  <td style="padding:6px 8px; text-align:center; font-weight:700; font-size:15px;">{{ entry.quantity }}</td>
+                  <td style="padding:6px 8px; text-align:center;">
+                    <button onclick="openAdjust({{ item.bin.id }}, {{ entry.product.id }}, '{{ entry.product.name }}', {{ entry.quantity }})"
+                            style="background:#2563eb; color:white; border:none; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:12px;">
+                      Ajustar
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <div style="color:#9ca3af; padding:8px; text-align:center;">Sin stock asignado — <a href="#" onclick="openAdjust({{ item.bin.id }}, null, null, 0)" style="color:#2563eb;">Agregar producto</a></div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align:center; padding:48px; color:#9ca3af;">
+    <div style="font-size:40px; margin-bottom:12px;">📦</div>
+    <div style="font-size:18px; font-weight:700;">Sin ubicaciones todavía</div>
+    <div style="margin-top:8px;">Creá las ubicaciones de este depósito para organizar el stock</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Modal: Nueva Ubicación -->
+<div id="modal-nueva-ub" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:white; border-radius:16px; padding:32px; width:100%; max-width:480px; margin:16px;">
+    <h3 style="margin:0 0 20px; font-size:20px; font-weight:800;">+ Nueva Ubicación</h3>
+    <form method="post" action="/wms/api/locations/{{ location.id }}/bins">
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div>
+          <label style="font-weight:700; font-size:13px;">Nombre / Código *</label>
+          <input name="name" required placeholder="Ej: A-1-B2, PASILLO-3, SECTOR-SUR"
+                 style="width:100%; margin-top:4px; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:15px; box-sizing:border-box;">
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+          <div>
+            <label style="font-weight:700; font-size:12px;">Pasillo</label>
+            <input name="aisle" placeholder="A"
+                   style="width:100%; margin-top:4px; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-weight:700; font-size:12px;">Estante</label>
+            <input name="shelf" placeholder="1"
+                   style="width:100%; margin-top:4px; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-weight:700; font-size:12px;">Posición</label>
+            <input name="position" placeholder="B2"
+                   style="width:100%; margin-top:4px; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; box-sizing:border-box;">
+          </div>
+        </div>
+        <div>
+          <label style="font-weight:700; font-size:13px;">Capacidad máxima (unidades)</label>
+          <input name="max_capacity" type="number" min="1" placeholder="Dejar vacío = sin límite"
+                 style="width:100%; margin-top:4px; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:15px; box-sizing:border-box;">
+        </div>
+      </div>
+      <div style="display:flex; gap:12px; margin-top:20px;">
+        <button type="submit" style="flex:1; background:#059669; color:white; border:none; padding:12px; border-radius:8px; font-weight:700; font-size:15px; cursor:pointer;">
+          Crear Ubicación
+        </button>
+        <button type="button" onclick="document.getElementById('modal-nueva-ub').style.display='none'"
+                style="flex:1; background:#f3f4f6; color:#374151; border:none; padding:12px; border-radius:8px; font-weight:700; font-size:15px; cursor:pointer;">
+          Cancelar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Ajustar Stock -->
+<div id="modal-adjust" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:white; border-radius:16px; padding:32px; width:100%; max-width:420px; margin:16px;">
+    <h3 style="margin:0 0 8px; font-size:20px; font-weight:800;">Ajustar Stock</h3>
+    <div id="adjust-subtitle" style="color:#6b7280; font-size:14px; margin-bottom:20px;"></div>
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div id="adjust-product-select">
+        <label style="font-weight:700; font-size:13px;">Producto ID</label>
+        <input id="adjust-product-id" type="number" min="1" placeholder="ID del producto"
+               style="width:100%; margin-top:4px; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:15px; box-sizing:border-box;">
+      </div>
+      <div>
+        <label style="font-weight:700; font-size:13px;">Cantidad final</label>
+        <input id="adjust-qty" type="number" min="0" value="0"
+               style="width:100%; margin-top:4px; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:22px; font-weight:800; text-align:center; box-sizing:border-box;">
+      </div>
+      <div>
+        <label style="font-weight:700; font-size:13px;">Motivo</label>
+        <select id="adjust-reason" style="width:100%; margin-top:4px; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;">
+          <option value="ajuste">Ajuste manual</option>
+          <option value="ingreso">Ingreso de mercadería</option>
+          <option value="conteo">Conteo físico</option>
+          <option value="merma">Merma / pérdida</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex; gap:12px; margin-top:20px;">
+      <button onclick="submitAdjust()"
+              style="flex:1; background:#2563eb; color:white; border:none; padding:12px; border-radius:8px; font-weight:700; font-size:15px; cursor:pointer;">
+        Confirmar
+      </button>
+      <button onclick="document.getElementById('modal-adjust').style.display='none'"
+              style="flex:1; background:#f3f4f6; color:#374151; border:none; padding:12px; border-radius:8px; font-weight:700; font-size:15px; cursor:pointer;">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentBinId = null;
+
+function toggleStockPanel(binId) {
+  const panel = document.getElementById('stock-panel-' + binId);
+  panel.style.display = panel.style.display === 'none' ? 'table-row' : 'none';
+}
+
+function openAdjust(binId, productId, productName, currentQty) {
+  currentBinId = binId;
+  const productSelect = document.getElementById('adjust-product-select');
+  const productInput = document.getElementById('adjust-product-id');
+  const subtitle = document.getElementById('adjust-subtitle');
+
+  if (productId) {
+    productInput.value = productId;
+    productSelect.style.display = 'none';
+    subtitle.textContent = `Producto: ${productName} | Ubicación: bin #${binId}`;
+  } else {
+    productSelect.style.display = 'block';
+    subtitle.textContent = `Ubicación: bin #${binId}`;
+  }
+
+  document.getElementById('adjust-qty').value = currentQty || 0;
+  document.getElementById('modal-adjust').style.display = 'flex';
+}
+
+async function submitAdjust() {
+  const productId = parseInt(document.getElementById('adjust-product-id').value);
+  const qty = parseInt(document.getElementById('adjust-qty').value);
+  const reason = document.getElementById('adjust-reason').value;
+
+  if (!productId || isNaN(qty)) {
+    alert('Completá todos los campos');
+    return;
+  }
+
+  const res = await fetch(`/wms/api/bins/${currentBinId}/stock/adjust`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ product_id: productId, quantity: qty, reason })
+  });
+
+  if (res.ok) {
+    document.getElementById('modal-adjust').style.display = 'none';
+    location.reload();
+  } else {
+    const err = await res.json();
+    alert('Error: ' + (err.detail || 'Error desconocido'));
+  }
+}
+</script>
+{% endblock %}

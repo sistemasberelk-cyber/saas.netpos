@@ -30,6 +30,7 @@
                 <a href="/pos" class="{% if active_page == 'pos' %}active{% endif %}">POS</a>
                 <a href="/sales" class="{% if active_page == 'sales' %}active{% endif %}">Ventas</a>
                 <a href="/picking" class="{% if active_page == 'picking' %}active{% endif %}">Picking</a>
+                <a href="/wms/depositos" class="{% if active_page == 'wms' %}active{% endif %}">Depósitos</a>
                 {% if user and user.role == "admin" %}
                 <a href="/reports" class="{% if active_page == 'reports' %}active{% endif %}">Reportes</a>
                 <a href="/settings" class="{% if active_page == 'settings' %}active{% endif %}">Configuracion</a>
