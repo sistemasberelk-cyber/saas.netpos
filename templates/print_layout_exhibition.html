@@ -5,23 +5,75 @@
     <meta charset="UTF-8">
     <title>Imprimir Etiquetas 100x65mm</title>
     <style>
+        :root {
+            --label-w: 100mm;
+            --label-h: 65mm;
+            --surface: #fffdf8;
+            --surface-soft: #f5eee3;
+            --ink: #111111;
+            --muted: #6b6255;
+            --accent: #b45309;
+            --line: #ded6ca;
+        }
+
         @page {
-            size: 100mm 65mm;
+            size: var(--label-w) var(--label-h);
             margin: 0;
         }
 
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Arial', sans-serif;
             margin: 0;
-            padding: 0;
-            background: #f0f9ff;
+            font-family: "Segoe UI", Arial, sans-serif;
+            color: var(--ink);
+            background:
+                linear-gradient(180deg, #efe8db 0%, #f7f2ea 45%, #efe6d6 100%);
         }
 
         .no-print {
             text-align: center;
-            padding: 20px;
-            background: white;
-            border-bottom: 2px solid #ddd;
+            padding: 24px 18px;
+            background: rgba(255, 255, 255, 0.92);
+            border-bottom: 1px solid rgba(122, 96, 54, 0.18);
+            backdrop-filter: blur(8px);
+        }
+
+        .no-print h2 {
+            margin: 0 0 6px;
+            font-size: 1.45rem;
+        }
+
+        .no-print p {
+            margin: 0 0 16px;
+            color: #645d52;
+        }
+
+        .toolbar {
+            display: inline-flex;
+            gap: 10px;
+        }
+
+        .toolbar button {
+            border: none;
+            border-radius: 999px;
+            padding: 11px 18px;
+            font-size: 0.98rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .toolbar .primary {
+            background: #111827;
+            color: #fff;
+        }
+
+        .toolbar .secondary {
+            background: #fff;
+            color: #3f3f46;
+            border: 1px solid #d4d4d8;
         }
 
         .label-grid {
@@ -29,111 +81,160 @@
             flex-wrap: wrap;
             justify-content: center;
             gap: 20px;
-            padding: 20px;
+            padding: 22px;
         }
 
         .label {
-            width: 100mm;
-            height: 65mm;
-            box-sizing: border-box;
-            background: white;
-            position: relative;
+            width: var(--label-w);
+            height: var(--label-h);
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 5mm;
+            box-shadow: 0 18px 42px rgba(64, 47, 20, 0.14);
             overflow: hidden;
-            border: 1px dashed #999;
-            display: flex;
-            flex-direction: column;
             padding: 5mm;
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            gap: 3mm;
+            position: relative;
+        }
+
+        .label::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-top: 3mm solid #efe6d6;
+            pointer-events: none;
         }
 
         .header {
             display: flex;
-            justify-content: flex-end;
-            margin-bottom: 2mm;
-            height: 6mm;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8mm;
         }
 
         .category {
-            font-size: 11pt;
-            color: #666;
+            max-width: 100%;
+            display: inline-flex;
+            align-items: center;
+            padding: 1.2mm 3mm;
+            border-radius: 999px;
+            background: var(--surface-soft);
+            color: var(--muted);
+            font-size: 10pt;
+            font-weight: 800;
             text-transform: uppercase;
-            font-weight: bold;
+            letter-spacing: 0.7px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 5mm;
+            min-height: 0;
+        }
+
+        .main-info {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 4mm;
         }
 
         .product-name {
-            font-size: 24pt;
-            font-weight: 800;
-            text-align: center;
-            line-height: 1.1;
-            margin-top: 2mm;
-            margin-bottom: 5mm;
-            height: 25mm;
-            overflow: hidden;
+            margin: 0;
+            font-size: 26pt;
+            font-weight: 900;
+            line-height: 1;
+            letter-spacing: -0.04em;
             display: -webkit-box;
-            -webkit-line-clamp: 2;
+            -webkit-line-clamp: 3;
             -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-wrap: balance;
+        }
+
+        .meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2mm;
+            align-items: center;
+        }
+
+        .item-number-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5mm 3mm;
+            border-radius: 999px;
+            background: #111827;
+            color: #fff;
+            font-size: 12pt;
+            font-weight: 800;
+        }
+
+        .price-tag {
+            align-self: flex-start;
+            min-width: 31mm;
+            padding: 2.6mm 3mm 2.2mm;
+            border-radius: 4mm;
+            background: linear-gradient(180deg, #fff6e1 0%, #f4e4bc 100%);
+            border: 1px solid #e6cb8f;
+            text-align: right;
+        }
+
+        .price-label {
+            font-size: 9pt;
+            font-weight: 800;
+            color: #8a6a1f;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .price-value {
+            font-size: 33pt;
+            font-weight: 900;
+            line-height: 0.95;
+            letter-spacing: -0.05em;
         }
 
         .footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-            margin-top: auto;
+            padding-top: 2.4mm;
+            border-top: 1px solid #e6dfd4;
         }
 
         .barcode-area {
             display: flex;
             flex-direction: column;
             align-items: center;
-            flex-grow: 1;
+            gap: 1.2mm;
         }
 
         .barcode-img {
-            height: 12mm;
-            max-width: 60mm;
+            width: 100%;
+            max-width: 70mm;
+            max-height: 16mm;
+            object-fit: contain;
             display: block;
         }
 
         .barcode-text {
             font-size: 9pt;
-            letter-spacing: 1px;
-            margin-top: 1mm;
-            font-family: monospace;
-            color: #444;
-        }
-
-        .item-number-badge {
-            font-size: 18pt;
-            font-weight: 900;
-            background: #000;
-            color: #fff;
-            padding: 2px 8px;
-            border-radius: 4px;
-            margin-top: 2mm;
-            display: inline-block;
-        }
-
-        .price-tag {
-            text-align: right;
-            padding-left: 5mm;
-        }
-
-        .price-label {
-            font-size: 10pt;
-            color: #666;
-            text-transform: uppercase;
-            font-weight: bold;
-        }
-
-        .price-value {
-            font-size: 36pt;
-            font-weight: 900;
-            color: #000;
-            line-height: 1;
+            letter-spacing: 1.2px;
+            font-family: "Consolas", "Courier New", monospace;
+            color: #4b5563;
+            text-align: center;
+            word-break: break-all;
         }
 
         @media print {
             body {
-                background: white;
+                background: #fff;
             }
 
             .no-print {
@@ -143,12 +244,12 @@
             .label-grid {
                 display: block;
                 padding: 0;
-                background: white;
             }
 
             .label {
                 border: none;
-                margin: 0;
+                border-radius: 0;
+                box-shadow: none;
                 page-break-after: always;
                 page-break-inside: avoid;
             }
@@ -158,31 +259,31 @@
 
 <body>
     <div class="no-print">
-        <h2>Vista Previa (100mm x 65mm)</h2>
-        <p>Configura tu impresora en tamaño: <b>100mm x 65mm</b>.</p>
-        <button onclick="window.print()"
-            style="padding: 12px 24px; font-size: 18px; cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 8px; font-weight: bold;">🖨️
-            IMPRIMIR AHORA</button>
-        <button onclick="window.close()"
-            style="padding: 12px 24px; font-size: 16px; cursor: pointer; margin-left:12px; border: 1px solid #ccc; background: white; border-radius: 8px;">Cerrar</button>
+        <h2>Vista previa de exhibición</h2>
+        <p>Configura la impresora en 100 x 65 mm y sin márgenes para mantener la escala real.</p>
+        <div class="toolbar">
+            <button class="primary" onclick="window.print()">Imprimir</button>
+            <button class="secondary" onclick="window.close()">Cerrar</button>
+        </div>
     </div>
 
     <div class="label-grid">
         {% for item in labels %}
         <div class="label">
             <div class="header">
-                <div class="category">{{ item.category or '' }}</div>
+                {% if item.category %}
+                <div class="category">{{ item.category }}</div>
+                {% endif %}
             </div>
 
-            <div class="product-name">{{ item.name }}</div>
-
-            <div class="footer">
-                <div class="barcode-area">
-                    <img src="/static/barcodes/{{ item.barcode_file }}" class="barcode-img" alt="{{ item.barcode }}">
-                    <div class="barcode-text">{{ item.barcode }}</div>
-                    {% if item.item_number %}
-                    <div class="item-number-badge">Art: {{ item.item_number }}</div>
-                    {% endif %}
+            <div class="content">
+                <div class="main-info">
+                    <h1 class="product-name">{{ item.name }}</h1>
+                    <div class="meta">
+                        {% if item.item_number %}
+                        <div class="item-number-badge">Art. {{ item.item_number }}</div>
+                        {% endif %}
+                    </div>
                 </div>
 
                 {% if not hide_price %}
@@ -191,6 +292,13 @@
                     <div class="price-value">${{ "{:,.0f}".format(item.price) }}</div>
                 </div>
                 {% endif %}
+            </div>
+
+            <div class="footer">
+                <div class="barcode-area">
+                    <img src="/static/barcodes/{{ item.barcode_file }}" class="barcode-img" alt="{{ item.barcode }}">
+                    <div class="barcode-text">{{ item.barcode }}</div>
+                </div>
             </div>
         </div>
         {% endfor %}
