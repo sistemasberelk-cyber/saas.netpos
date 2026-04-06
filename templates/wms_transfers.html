@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Transferencias de Stock{% endblock %}
+
+{% block content %}
+<div class="glass-card" style="max-width:640px; margin:0 auto;">
+  <div style="margin-bottom:24px;">
+    <a href="/wms/depositos" style="font-size:13px; color:#6b7280; text-decoration:none;">← Depósitos</a>
+    <h2 style="margin:4px 0 4px;">🔄 Transferencia de Stock</h2>
+    <p style="color:#6b7280; font-size:14px; margin:0;">Movimiento entre ubicaciones del mismo tenant. Operación atómica — no se pierden unidades.</p>
+  </div>
+
+  <div id="transfer-form">
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+      <!-- Producto -->
+      <div>
+        <label style="font-weight:700; font-size:13px; color:#374151;">Producto *</label>
+        <select id="product-select" onchange="loadProductLocations()"
+                style="width:100%; margin-top:6px; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;">
+          <option value="">Seleccioná un producto...</option>
+          {% for p in products %}
+          <option value="{{ p.id }}">{{ p.name }} {% if p.item_number %}(Art: {{ p.item_number }}){% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Info del producto -->
+      <div id="product-locations" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:14px;">
+        <div style="font-size:12px; font-weight:700; color:#1d4ed8; margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em;">Ubicaciones actuales de este producto</div>
+        <div id="locations-list" style="font-size:13px; color:#1e3a8a;"></div>
+      </div>
+
+      <!-- Origen -->
+      <div>
+        <label style="font-weight:700; font-size:13px; color:#374151;">Desde (Origen) *</label>
+        <select id="from-bin" style="width:100%; margin-top:6px; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;">
+          <option value="">Seleccioná origen...</option>
+          {% for loc in locations %}
+          <optgroup label="🏭 {{ loc.name }}">
+            {% for b in loc.bins %}
+            {% if b.is_active %}
+            <option value="{{ b.id }}">{{ b.name }}</option>
+            {% endif %}
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Cantidad -->
+      <div>
+        <label style="font-weight:700; font-size:13px; color:#374151;">Cantidad a transferir *</label>
+        <input id="quantity" type="number" min="1" value="1"
+               style="width:100%; margin-top:6px; padding:12px; border:1px solid #d1d5db; border-radius:8px; font-size:22px; font-weight:800; text-align:center; box-sizing:border-box;">
+      </div>
+
+      <!-- Destino -->
+      <div>
+        <label style="font-weight:700; font-size:13px; color:#374151;">Hacia (Destino) *</label>
+        <select id="to-bin" style="width:100%; margin-top:6px; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;">
+          <option value="">Seleccioná destino...</option>
+          {% for loc in locations %}
+          <optgroup label="🏭 {{ loc.name }}">
+            {% for b in loc.bins %}
+            {% if b.is_active %}
+            <option value="{{ b.id }}">{{ b.name }} {% if b.max_capacity %}(máx: {{b.max_capacity}}){% endif %}</option>
+            {% endif %}
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Notas -->
+      <div>
+        <label style="font-weight:700; font-size:13px; color:#374151;">Notas (opcional)</label>
+        <input id="notes" type="text" placeholder="Motivo, referencia, etc."
+               style="width:100%; margin-top:6px; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; box-sizing:border-box;">
+      </div>
+
+      <button onclick="executeTransfer()"
+              style="background:#2563eb; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; font-size:16px; cursor:pointer; margin-top:8px;">
+        🔄 Confirmar Transferencia
+      </button>
+    </div>
+  </div>
+
+  <!-- Resultado -->
+  <div id="result-panel" style="display:none; margin-top:20px;"></div>
+
+  <!-- Historial reciente -->
+  {% if recent_movements %}
+  <div style="margin-top:32px; border-top:1px solid #e5e7eb; padding-top:20px;">
+    <h3 style="font-size:16px; font-weight:800; margin-bottom:12px; color:#374151;">📋 Transferencias recientes</h3>
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr style="background:#f9fafb; border-bottom:1px solid #e5e7eb;">
+          <th style="padding:8px 10px; text-align:left; color:#6b7280; font-weight:600;">Producto</th>
+          <th style="padding:8px 10px; text-align:left; color:#6b7280; font-weight:600;">Origen</th>
+          <th style="padding:8px 10px; text-align:left; color:#6b7280; font-weight:600;">Destino</th>
+          <th style="padding:8px 10px; text-align:center; color:#6b7280; font-weight:600;">Cant.</th>
+          <th style="padding:8px 10px; text-align:left; color:#6b7280; font-weight:600;">Fecha</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in recent_movements %}
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:8px 10px; font-weight:600;">{{ row.product_name }}</td>
+          <td style="padding:8px 10px; color:#6b7280;">{{ row.from_bin_name or '—' }}</td>
+          <td style="padding:8px 10px; color:#6b7280;">{{ row.to_bin_name or '—' }}</td>
+          <td style="padding:8px 10px; text-align:center; font-weight:700; color:#2563eb;">{{ row.quantity }}</td>
+          <td style="padding:8px 10px; color:#9ca3af; font-size:12px;">{{ row.timestamp.strftime('%d/%m %H:%M') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+async function loadProductLocations() {
+  const productId = document.getElementById('product-select').value;
+  const panel = document.getElementById('product-locations');
+  if (!productId) { panel.style.display = 'none'; return; }
+
+  try {
+    const res = await fetch(`/wms/api/products/${productId}/locations`);
+    const data = await res.json();
+    const list = document.getElementById('locations-list');
+    if (data.length === 0) {
+      list.innerHTML = '<em>Sin stock asignado a posiciones</em>';
+    } else {
+      list.innerHTML = data.map(d =>
+        `<div style="padding:3px 0;">📦 <strong>${d.bin_name}</strong> (${d.location_name}) — <span style="font-weight:800;">${d.quantity} u.</span></div>`
+      ).join('');
+    }
+    panel.style.display = 'block';
+  } catch(e) { panel.style.display = 'none'; }
+}
+
+async function executeTransfer() {
+  const productId = parseInt(document.getElementById('product-select').value);
+  const fromBinId = parseInt(document.getElementById('from-bin').value);
+  const toBinId = parseInt(document.getElementById('to-bin').value);
+  const quantity = parseInt(document.getElementById('quantity').value);
+  const notes = document.getElementById('notes').value;
+
+  if (!productId || !fromBinId || !toBinId || !quantity) {
+    showResult('error', 'Completá todos los campos obligatorios');
+    return;
+  }
+  if (fromBinId === toBinId) {
+    showResult('error', 'El origen y destino no pueden ser el mismo');
+    return;
+  }
+
+  const res = await fetch('/wms/api/bins/transfer', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      product_id: productId,
+      from_bin_id: fromBinId,
+      to_bin_id: toBinId,
+      quantity,
+      notes,
+      request_id: crypto.randomUUID()
+    })
+  });
+
+  const data = await res.json();
+  if (res.ok) {
+    showResult('success', `✅ Transferencia realizada. ${quantity} unidades movidas correctamente.`);
+    await loadProductLocations();
+  } else {
+    showResult('error', '❌ ' + (data.detail || 'Error desconocido'));
+  }
+}
+
+function showResult(type, msg) {
+  const panel = document.getElementById('result-panel');
+  panel.style.display = 'block';
+  panel.innerHTML = `<div style="padding:14px 16px; border-radius:10px;
+    background:${type === 'success' ? '#d1fae5' : '#fee2e2'};
+    color:${type === 'success' ? '#065f46' : '#991b1b'};
+    font-weight:700; font-size:15px;">${msg}</div>`;
+  panel.scrollIntoView({behavior:'smooth'});
+}
+</script>
+{% endblock %}

@@ -1,15 +1,7 @@
-"""
-WMS Router — Depósitos y Ubicaciones
-=====================================
-Endpoints MVP para gestión de depósitos físicos, ubicaciones (bins)
-y movimientos de stock entre posiciones.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select, func
-from sqlalchemy import text
 from typing import Optional, List
 from datetime import datetime, timezone
 from pydantic import BaseModel
@@ -19,9 +11,15 @@ from database.models import (
     Location, Bin, BinStock, StockMovement, Product, User, Settings, Tenant
 )
 from web.dependencies import require_auth, get_settings, get_tenant
+from services.bin_stock_service import BinStockService, StockServiceError
 
 router = APIRouter(prefix="/wms", tags=["WMS"])
 templates = Jinja2Templates(directory="templates")
+
+
+def _svc_error(e: StockServiceError):
+    raise HTTPException(status_code=e.status_code, detail=e.message)
+
 
 
 # ============================================================
@@ -240,7 +238,7 @@ def get_bin_stock(
 
 class StockAdjustRequest(BaseModel):
     product_id: int
-    quantity: int          # Cantidad FINAL deseada (no delta)
+    quantity: int
     reason: Optional[str] = "ajuste"
     notes: Optional[str] = None
 
@@ -253,68 +251,13 @@ def adjust_bin_stock(
     user: User = Depends(require_auth),
     tenant_id: int = Depends(get_tenant)
 ):
-    """
-    Ajuste manual de stock en una ubicación.
-    Sincroniza product.stock_quantity en la misma transacción.
-    """
-    bin_ = session.get(Bin, bin_id)
-    if not bin_ or bin_.tenant_id != tenant_id:
-        raise HTTPException(404, "Ubicación no encontrada")
-
-    if body.quantity < 0:
-        raise HTTPException(400, "La cantidad no puede ser negativa")
-
-    # Verificar capacidad máxima
-    if bin_.max_capacity is not None and body.quantity > bin_.max_capacity:
-        raise HTTPException(400, f"Excede la capacidad máxima de esta ubicación ({bin_.max_capacity})")
-
-    product = session.get(Product, body.product_id)
-    if not product or product.tenant_id != tenant_id:
-        raise HTTPException(404, "Producto no encontrado")
-
-    # Buscar o crear fila en BinStock
-    bin_stock = session.exec(
-        select(BinStock).where(
-            BinStock.bin_id == bin_id,
-            BinStock.product_id == body.product_id
+    try:
+        return BinStockService.adjust_stock(
+            session, tenant_id, bin_id, body.product_id,
+            body.quantity, body.reason, body.notes, user.id
         )
-    ).first()
-
-    old_qty = bin_stock.quantity if bin_stock else 0
-    delta = body.quantity - old_qty
-
-    if bin_stock:
-        bin_stock.quantity = body.quantity
-        bin_stock.updated_at = datetime.now(timezone.utc)
-    else:
-        bin_stock = BinStock(
-            tenant_id=tenant_id,
-            bin_id=bin_id,
-            product_id=body.product_id,
-            quantity=body.quantity
-        )
-    session.add(bin_stock)
-
-    # Registrar movimiento de auditoría (solo si hay cambio real)
-    if delta != 0:
-        movement = StockMovement(
-            tenant_id=tenant_id,
-            product_id=body.product_id,
-            from_bin_id=None if delta > 0 else bin_id,
-            to_bin_id=bin_id if delta > 0 else None,
-            quantity=abs(delta),
-            reason=body.reason,
-            notes=body.notes,
-            user_id=user.id
-        )
-        session.add(movement)
-
-        # Sincronizar stock global del producto
-        product.stock_quantity = max(0, product.stock_quantity + delta)
-        session.add(product)
-
-    session.commit()
-    return {"ok": True, "bin_id": bin_id, "product_id": body.product_id, "new_quantity": body.quantity, "delta": delta}
+    except StockServiceError as e:
+        _svc_error(e)
 
 
 class TransferRequest(BaseModel):
@@ -323,7 +266,7 @@ class TransferRequest(BaseModel):
     to_bin_id: int
     quantity: int
     notes: Optional[str] = None
-    request_id: Optional[str] = None   # Para idempotencia
+    request_id: Optional[str] = None
 
 
 @router.post("/api/bins/transfer")
@@ -333,96 +276,15 @@ def transfer_stock(
     user: User = Depends(require_auth),
     tenant_id: int = Depends(get_tenant)
 ):
-    """
-    Transfiere stock entre dos ubicaciones (mismo o distinto depósito).
-    Usa lock pesimista para evitar condiciones de carrera.
-    """
-    if body.quantity <= 0:
-        raise HTTPException(400, "La cantidad a transferir debe ser mayor a 0")
-    if body.from_bin_id == body.to_bin_id:
-        raise HTTPException(400, "Origen y destino no pueden ser iguales")
-
-    # Idempotencia: si ya se procesó este request_id, devolver OK
-    if body.request_id:
-        existing = session.exec(
-            select(StockMovement).where(StockMovement.request_id == body.request_id)
-        ).first()
-        if existing:
-            return {"ok": True, "idempotent": True, "movement_id": existing.id}
-
-    # Validar bins pertenecen al tenant
-    from_bin = session.get(Bin, body.from_bin_id)
-    to_bin = session.get(Bin, body.to_bin_id)
-
-    if not from_bin or from_bin.tenant_id != tenant_id:
-        raise HTTPException(404, "Ubicación origen no encontrada")
-    if not to_bin or to_bin.tenant_id != tenant_id:
-        raise HTTPException(404, "Ubicación destino no encontrada")
-
-    # Lock pesimista sobre las filas de BinStock (SELECT FOR UPDATE)
-    from_stock = session.exec(
-        select(BinStock).where(
-            BinStock.bin_id == body.from_bin_id,
-            BinStock.product_id == body.product_id
-        ).with_for_update()
-    ).first()
-
-    if not from_stock or from_stock.quantity < body.quantity:
-        available = from_stock.quantity if from_stock else 0
-        raise HTTPException(400, f"Stock insuficiente en origen. Disponible: {available}")
-
-    # Verificar capacidad destino
-    to_stock = session.exec(
-        select(BinStock).where(
-            BinStock.bin_id == body.to_bin_id,
-            BinStock.product_id == body.product_id
-        ).with_for_update()
-    ).first()
-
-    to_current = to_stock.quantity if to_stock else 0
-    if to_bin.max_capacity is not None and (to_current + body.quantity) > to_bin.max_capacity:
-        raise HTTPException(400, f"Excede la capacidad máxima del destino ({to_bin.max_capacity})")
-
-    # Ejecutar la transferencia atómica
-    from_stock.quantity -= body.quantity
-    from_stock.updated_at = datetime.now(timezone.utc)
-    session.add(from_stock)
-
-    if to_stock:
-        to_stock.quantity += body.quantity
-        to_stock.updated_at = datetime.now(timezone.utc)
-        session.add(to_stock)
-    else:
-        to_stock = BinStock(
-            tenant_id=tenant_id,
-            bin_id=body.to_bin_id,
-            product_id=body.product_id,
-            quantity=body.quantity
+    try:
+        return BinStockService.transfer_stock(
+            session, tenant_id, body.product_id,
+            body.from_bin_id, body.to_bin_id, body.quantity,
+            body.notes, body.request_id, user.id
         )
-        session.add(to_stock)
+    except StockServiceError as e:
+        _svc_error(e)
 
-    # Registrar movimiento
-    movement = StockMovement(
-        tenant_id=tenant_id,
-        product_id=body.product_id,
-        from_bin_id=body.from_bin_id,
-        to_bin_id=body.to_bin_id,
-        quantity=body.quantity,
-        reason="transferencia",
-        notes=body.notes,
-        request_id=body.request_id,
-        user_id=user.id
-    )
-    session.add(movement)
-    session.commit()
-
-    return {
-        "ok": True,
-        "movement_id": movement.id,
-        "from_bin": body.from_bin_id,
-        "to_bin": body.to_bin_id,
-        "quantity": body.quantity
-    }
 
 
 # ============================================================
@@ -600,3 +462,115 @@ def wms_location_detail(
         "location": loc,
         "bins_data": bins_data,
     })
+
+
+@router.get("/stock-map", response_class=HTMLResponse)
+def wms_stock_map_ui(
+    request: Request,
+    location_id: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    user: User = Depends(require_auth),
+    settings: Settings = Depends(get_settings),
+    tenant_id: int = Depends(get_tenant),
+    session: Session = Depends(get_session)
+):
+    """Página del mapa de stock completo."""
+    map_data = get_stock_map(location_id, page, page_size, session, user, tenant_id)
+    locations = list_locations(session, user, tenant_id)
+    
+    return templates.TemplateResponse("wms_stock_map.html", {
+        "request": request,
+        "active_page": "wms_map",
+        "settings": settings,
+        "user": user,
+        "locations": locations,
+        "stock_map": map_data["data"],
+        "total": map_data["total"],
+        "page": map_data["page"],
+        "page_size": map_data["page_size"],
+    })
+
+
+@router.get("/transfers", response_class=HTMLResponse)
+def wms_transfers_ui(
+    request: Request,
+    user: User = Depends(require_auth),
+    settings: Settings = Depends(get_settings),
+    tenant_id: int = Depends(get_tenant),
+    session: Session = Depends(get_session)
+):
+    """Página de transferencias de stock."""
+    # Productos con stock
+    products = session.exec(
+        select(Product).where(Product.tenant_id == tenant_id, Product.stock_quantity > 0).order_by(Product.name)
+    ).all()
+    
+    # Locaciones y sus bins
+    locations = session.exec(select(Location).where(Location.tenant_id == tenant_id, Location.is_active == True)).all()
+    locations_with_bins = []
+    for loc in locations:
+        bins = session.exec(select(Bin).where(Bin.location_id == loc.id, Bin.tenant_id == tenant_id, Bin.is_active == True)).all()
+        # Create dict to inject bins easily
+        loc_dict = {"name": loc.name, "id": loc.id, "bins": bins}
+        locations_with_bins.append(loc_dict)
+        
+    # Movimientos recientes
+    movements = session.exec(
+        select(StockMovement)
+        .where(StockMovement.tenant_id == tenant_id, StockMovement.reason == "transferencia")
+        .order_by(StockMovement.timestamp.desc())
+        .limit(10)
+    ).all()
+    
+    # Enriquecer movimientos con nombres
+    for m in movements:
+        m.product_name = session.get(Product, m.product_id).name
+        m.from_bin_name = session.get(Bin, m.from_bin_id).name if m.from_bin_id else None
+        m.to_bin_name = session.get(Bin, m.to_bin_id).name if m.to_bin_id else None
+
+    return templates.TemplateResponse("wms_transfers.html", {
+        "request": request,
+        "active_page": "wms_transfers",
+        "settings": settings,
+        "user": user,
+        "products": products,
+        "locations": locations_with_bins,
+        "recent_movements": movements,
+    })
+
+
+# ============================================================
+# API: BACKFILL & RECONCILIACIÓN
+# ============================================================
+
+@router.post("/api/admin/backfill")
+def trigger_backfill(
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant)
+):
+    """Crea depósito y ubicación por defecto, y les asigna el stock global actual."""
+    if user.role not in ["admin", "superadmin"]:
+        raise HTTPException(403, "Se requiere rol admin")
+    try:
+        return BinStockService.backfill_default_location(session, tenant_id)
+    except StockServiceError as e:
+        _svc_error(e)
+
+
+@router.post("/api/admin/reconcile")
+def run_reconciliation(
+    fix: bool = Query(False),
+    session: Session = Depends(get_session),
+    user: User = Depends(require_auth),
+    tenant_id: int = Depends(get_tenant)
+):
+    """Ejecuta reconciliación de product.stock_quantity vs bin_stock."""
+    if user.role not in ["admin", "superadmin"]:
+        raise HTTPException(403, "Se requiere rol admin")
+    try:
+        results = BinStockService.reconcile_all(session, tenant_id, fix=fix)
+        return {"ok": True, "discrepancies": results}
+    except StockServiceError as e:
+        _svc_error(e)

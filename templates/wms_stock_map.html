@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Mapa de Stock{% endblock %}
+
+{% block content %}
+<div class="glass-card">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+    <h2>🗺️ Mapa de Stock por Ubicación</h2>
+    <a href="/wms/depositos" style="background:#f3f4f6; color:#374151; padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:700; font-size:14px;">← Depósitos</a>
+  </div>
+
+  <!-- Filtros -->
+  <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; background:#f9fafb; padding:16px; border-radius:10px;">
+    <select name="location_id" style="padding:8px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;">
+      <option value="">Todos los depósitos</option>
+      {% for loc in locations %}
+      <option value="{{ loc.id }}" {% if request.query_params.get('location_id')|int == loc.id %}selected{% endif %}>
+        {{ loc.name }}
+      </option>
+      {% endfor %}
+    </select>
+    <button type="submit" style="background:#2563eb; color:white; border:none; padding:8px 20px; border-radius:8px; font-weight:700; cursor:pointer;">Filtrar</button>
+    {% if request.query_params.get('location_id') %}
+    <a href="/wms/stock-map" style="color:#6b7280; padding:8px 16px; border-radius:8px; text-decoration:none; font-size:14px; display:flex; align-items:center;">✕ Limpiar</a>
+    {% endif %}
+  </form>
+
+  <!-- Tabla de stock -->
+  {% if stock_map %}
+  <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr style="background:#f9fafb; border-bottom:2px solid #e5e7eb;">
+          <th style="padding:10px 14px; text-align:left; font-weight:700; color:#374151;">Depósito</th>
+          <th style="padding:10px 14px; text-align:left; font-weight:700; color:#374151;">Ubicación</th>
+          <th style="padding:10px 14px; text-align:left; font-weight:700; color:#374151;">Producto</th>
+          <th style="padding:10px 14px; text-align:left; font-weight:700; color:#374151;">Art.</th>
+          <th style="padding:10px 14px; text-align:center; font-weight:700; color:#374151;">Cantidad</th>
+          <th style="padding:10px 14px; text-align:center; font-weight:700; color:#374151;">Cap. Máx.</th>
+          <th style="padding:10px 14px; text-align:center; font-weight:700; color:#374151;">% Ocupación</th>
+          <th style="padding:10px 14px; text-align:center; font-weight:700; color:#374151;">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in stock_map %}
+        {% set pct = ((row.quantity / row.max_capacity * 100) | int) if row.max_capacity else none %}
+        <tr style="border-bottom:1px solid #f3f4f6; transition:background .1s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='white'">
+          <td style="padding:10px 14px; color:#6b7280; font-size:12px;">{{ row.location_name }}</td>
+          <td style="padding:10px 14px; font-weight:700; color:#111827;">{{ row.bin_name }}</td>
+          <td style="padding:10px 14px; color:#374151;">{{ row.product_name }}</td>
+          <td style="padding:10px 14px; color:#9ca3af; font-size:12px;">{{ row.item_number or '—' }}</td>
+          <td style="padding:10px 14px; text-align:center; font-weight:800; font-size:16px; color:#059669;">{{ row.quantity }}</td>
+          <td style="padding:10px 14px; text-align:center; color:#6b7280;">{{ row.max_capacity or '∞' }}</td>
+          <td style="padding:10px 14px; text-align:center;">
+            {% if pct is not none %}
+            <div style="background:#e5e7eb; border-radius:999px; height:8px; width:80px; overflow:hidden; margin:0 auto;">
+              <div style="height:100%; width:{{ [pct, 100]|min }}%; background:{% if pct > 90 %}#ef4444{% elif pct > 70 %}#f59e0b{% else %}#10b981{% endif %}; border-radius:999px;"></div>
+            </div>
+            <div style="font-size:11px; color:#6b7280; margin-top:2px;">{{ pct }}%</div>
+            {% else %}
+            <span style="color:#d1d5db; font-size:12px;">—</span>
+            {% endif %}
+          </td>
+          <td style="padding:10px 14px; text-align:center;">
+            <a href="/wms/depositos/{{ row.location_id }}" 
+               style="font-size:12px; color:#2563eb; text-decoration:none; font-weight:600;">Ver →</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Paginación -->
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:16px; border-top:1px solid #e5e7eb;">
+    <div style="color:#6b7280; font-size:13px;">
+      Mostrando {{ stock_map|length }} de {{ total }} registros
+    </div>
+    <div style="display:flex; gap:8px;">
+      {% if page > 1 %}
+      <a href="?page={{ page - 1 }}{% if request.query_params.get('location_id') %}&location_id={{ request.query_params.get('location_id') }}{% endif %}"
+         style="padding:6px 14px; background:#f3f4f6; color:#374151; text-decoration:none; border-radius:8px; font-weight:700; font-size:13px;">← Anterior</a>
+      {% endif %}
+      {% if page * page_size < total %}
+      <a href="?page={{ page + 1 }}{% if request.query_params.get('location_id') %}&location_id={{ request.query_params.get('location_id') }}{% endif %}"
+         style="padding:6px 14px; background:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:700; font-size:13px;">Siguiente →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div style="text-align:center; padding:48px; color:#9ca3af;">
+    <div style="font-size:40px; margin-bottom:12px;">🗺️</div>
+    <div style="font-size:18px; font-weight:700;">Sin stock asignado a ubicaciones</div>
+    <div style="margin-top:8px;">Entrá a un depósito y ajustá el stock de cada posición para ver el mapa</div>
+    <div style="margin-top:16px;">
+      <a href="/wms/depositos" style="background:#2563eb; color:white; padding:10px 20px; border-radius:8px; font-weight:700; text-decoration:none;">Ir a Depósitos</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
