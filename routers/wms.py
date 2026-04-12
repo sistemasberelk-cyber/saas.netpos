@@ -524,13 +524,22 @@ def wms_transfers_ui(
     ).all()
     
     # Enriquecer movimientos con nombres
+    enriched_movements = []
     for m in movements:
         p = session.get(Product, m.product_id)
-        m.product_name = p.name if p else f"ID: {m.product_id}"
+        product_name = p.name if p else f"ID: {m.product_id}"
         fb = session.get(Bin, m.from_bin_id) if m.from_bin_id else None
-        m.from_bin_name = fb.name if fb else (f"ID: {m.from_bin_id}" if m.from_bin_id else None)
+        from_bin_name = fb.name if fb else (f"ID: {m.from_bin_id}" if m.from_bin_id else None)
         tb = session.get(Bin, m.to_bin_id) if m.to_bin_id else None
-        m.to_bin_name = tb.name if tb else (f"ID: {m.to_bin_id}" if m.to_bin_id else None)
+        to_bin_name = tb.name if tb else (f"ID: {m.to_bin_id}" if m.to_bin_id else None)
+        
+        enriched_movements.append({
+            "product_name": product_name,
+            "from_bin_name": from_bin_name,
+            "to_bin_name": to_bin_name,
+            "quantity": m.quantity,
+            "timestamp": m.timestamp
+        })
 
     return templates.TemplateResponse("wms_transfers.html", {
         "request": request,
@@ -539,7 +548,7 @@ def wms_transfers_ui(
         "user": user,
         "products": products,
         "locations": locations_with_bins,
-        "recent_movements": movements,
+        "recent_movements": enriched_movements,
     })
 
 
