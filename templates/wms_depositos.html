@@ -67,7 +67,7 @@
             align-items:center; justify-content:center;">
   <div style="background:white; border-radius:16px; padding:32px; width:100%; max-width:480px; margin:16px;">
     <h3 style="margin:0 0 20px; font-size:20px; font-weight:800;">+ Nuevo Depósito</h3>
-    <form method="post" action="/wms/api/locations">
+    <form id="form-nuevo-dep" onsubmit="submitNuevoDep(event)">
       <div style="display:flex; flex-direction:column; gap:14px;">
         <div>
           <label style="font-weight:700; font-size:13px; color:#374151;">Nombre *</label>
@@ -103,4 +103,28 @@
     </form>
   </div>
 </div>
+
+<script>
+async function submitNuevoDep(event) {
+  event.preventDefault();
+  const formData = new FormData(event.target);
+  const data = new URLSearchParams(formData);
+
+  const res = await fetch(`/wms/api/locations`, {
+    method: 'POST',
+    body: data
+  });
+
+  if (res.ok) {
+    location.reload();
+  } else {
+    try {
+      const err = await res.json();
+      alert('Error: ' + (err.detail || 'Error desconocido'));
+    } catch(e) {
+      alert('Error en el servidor');
+    }
+  }
+}
+</script>
 {% endblock %}
