@@ -1,15 +1,14 @@
 # Backend Requirements (v2 architecture optimized)
-fastapi>=0.100.0
-starlette>=0.27.0
-uvicorn[standard]
-sqlmodel
+fastapi==0.115.0
+starlette==0.36.3
+uvicorn[standard]==0.30.0
+sqlmodel==0.0.22
 python-multipart
-jinja2>=3.1.2
+jinja2>=3.1.2,<3.2.0
 python-barcode
 pillow
 argon2-cffi
 passlib[bcrypt]
-bcrypt
 psycopg2-binary
 itsdangerous
 supabase
