@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid px-4 py-5">
+    <div class="row align-items-center mb-4">
+        <div class="col-md-6">
+            <h1 class="h2 text-white mb-0">Arqueo de Caja / Cierre de Día</h1>
+            <p class="text-muted">Consolidación de todos los movimientos de fondos.</p>
+        </div>
+        <div class="col-md-6 text-end">
+            <form action="/reports/cash-flow" method="get" class="d-inline-flex gap-2">
+                <input type="date" name="date_filter" class="form-control bg-dark border-secondary text-white" value="{{ date }}">
+                <button type="submit" class="btn btn-primary">Ver Arqueo</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Resumen de Fondos -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-3">
+            <div class="card bg-dark border-secondary">
+                <div class="card-body p-4 text-center">
+                    <h6 class="text-uppercase text-muted fw-bold small">Efectivo Ingresado</h6>
+                    <div class="h3 text-success my-2">${{ "{:,.2f}".format(total_in_cash) }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-dark border-secondary">
+                <div class="card-body p-4 text-center">
+                    <h6 class="text-uppercase text-muted fw-bold small">Transferencias Recibidas</h6>
+                    <div class="h3 text-info my-2">${{ "{:,.2f}".format(total_in_transfer) }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-dark border-secondary border-danger border-opacity-25">
+                <div class="card-body p-4 text-center">
+                    <h6 class="text-uppercase text-danger fw-bold small">Salidas / Gastos</h6>
+                    <div class="h3 text-danger my-2">-${{ "{:,.2f}".format(total_out) }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-primary border-primary">
+                <div class="card-body p-4 text-center text-white">
+                    <h6 class="text-uppercase text-white-50 fw-bold small">Saldo Neto del Día</h6>
+                    <div class="h3 fw-bold my-2">${{ "{:,.2f}".format(balance) }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Listado de Movimientos -->
+    <div class="card bg-dark border-secondary shadow">
+        <div class="card-header border-secondary bg-transparent p-4 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 text-white">Detalle de Movimientos</h5>
+            <button onclick="window.print()" class="btn btn-sm btn-outline-light">
+                <i class="bi bi-printer me-1"></i> Imprimir Arqueo
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-dark table-hover mb-0 align-middle">
+                    <thead class="table-light text-dark">
+                        <tr>
+                            <th class="ps-4">Hora</th>
+                            <th>Concepto / Referencia</th>
+                            <th>Tipo / Medio</th>
+                            <th class="text-end pe-4">Monto</th>
+                        </tr>
+                    </thead>
+                    <tbody class="border-top-0">
+                        {% for m in movements %}
+                        <tr>
+                            <td class="ps-4 text-muted small">{{ m.timestamp.strftime("%H:%M") }} hs</td>
+                            <td>
+                                <div>{{ m.concept }}</div>
+                                {% if m.sale_id %}
+                                <span class="badge bg-secondary extra-small">Venta #{{ m.sale_id }}</span>
+                                {% endif %}
+                                {% if m.payment_id %}
+                                <span class="badge bg-info text-dark extra-small">Cobranza #{{ m.payment_id }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if m.amount > 0 %}
+                                    <span class="text-success small"><i class="bi bi-arrow-down-left me-1"></i>Ingreso</span>
+                                {% else %}
+                                    <span class="text-danger small"><i class="bi bi-arrow-up-right me-1"></i>Egreso</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end pe-4 fw-bold {% if m.amount > 0 %}text-white{% else %}text-danger{% endif %}">
+                                ${{ "{:,.2f}".format(m.amount) }}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center py-5 text-muted">No se registraron movimientos en esta fecha.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .extra-small { font-size: 0.65rem; padding: 2px 6px; }
+    @media print {
+        .btn, form, p.text-muted { display: none !important; }
+        .card { border: none !important; }
+        body { background: white !important; color: black !important; }
+        .table-dark { color: black !important; background: white !important; }
+    }
+</style>
+{% endblock %}

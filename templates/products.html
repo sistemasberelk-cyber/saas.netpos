@@ -422,7 +422,7 @@
                     })
                     .catch(error => {
                         Swal.showValidationMessage(
-                            `Request failed: ${error}`
+                            `Error de importación: ${error}`
                         )
                     })
             },
@@ -430,17 +430,12 @@
         });
 
         if (file) {
-            let msg = `Agregados: ${file.added}, Actualizados: ${file.updated}`;
-            if (file.errors && file.errors.length > 0) {
-                msg += `<br><br><span style="color:red">Errores (${file.errors.length}):</span><br>` + file.errors.slice(0, 5).join('<br>');
-                if (file.errors.length > 5) msg += '<br>...';
-            }
-
+            let msg = `Nuevos creados: ${file.created}<br>Actualizados: ${file.updated}`;
             Swal.fire({
-                title: 'Importación Completada',
+                title: 'Importación Exitosa',
                 html: msg,
-                icon: file.errors && file.errors.length > 0 ? 'warning' : 'success'
-            });
+                icon: 'success'
+            }).then(() => window.location.reload());
         }
     }
 

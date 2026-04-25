@@ -97,45 +97,41 @@
         </div>
     </div>
 
-    <!-- Payment Modal -->
-    <div id="payment-modal"
-        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 300; justify-content: center; align-items: center;">
-        <div
-            style="background: white; padding: 24px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
-            <h2 style="margin-top: 0; color: var(--primary-color);">Confirmar Venta</h2>
-
-            <div style="margin: 20px 0; font-size: 1.1rem;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                    <span>Total a Pagar:</span>
-                    <strong id="modal-total-display">$0.00</strong>
+            <div style="margin-bottom: 20px; display: flex; flex-direction: column; gap: 15px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; background: #f8fafc; padding: 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                    <label style="font-weight: 600; color: #475569;">💵 Efectivo</label>
+                    <div style="display: flex; align-items: center; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 10px; width: 140px;">
+                        <span style="color: #94a3b8; font-weight: bold;">$</span>
+                        <input type="number" id="pay-cash" step="0.01" value="0" oninput="calculateRemaining()" style="width: 100%; padding: 10px; border: none; outline: none; text-align: right; font-weight: 700; color: #1e293b;">
+                    </div>
                 </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                    <span>Cliente:</span>
-                    <strong id="modal-client-display">Casual</strong>
+                
+                <div style="display: flex; align-items: center; justify-content: space-between; background: #f8fafc; padding: 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                    <label style="font-weight: 600; color: #475569;">📱 Transferencia</label>
+                    <div style="display: flex; align-items: center; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 10px; width: 140px;">
+                        <span style="color: #94a3b8; font-weight: bold;">$</span>
+                        <input type="number" id="pay-transfer" step="0.01" value="0" oninput="calculateRemaining()" style="width: 100%; padding: 10px; border: none; outline: none; text-align: right; font-weight: 700; color: #1e293b;">
+                    </div>
                 </div>
-            </div>
-
-            <div style="margin-bottom: 20px;">
-                <label for="payment-method" style="display: block; margin-bottom: 8px; font-weight: bold;">Método de
-                    Pago:</label>
-                <select id="payment-method"
-                    style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; background: #fff; font-size: 1.1rem; margin-bottom: 15px;"
-                    onchange="handlePaymentMethodChange()">
-                    <option value="cash">Efectivo</option>
-                    <option value="transfer">Transferencia</option>
-                    <option value="account">Cuenta Corriente (Fiado)</option>
-                </select>
-
-                <label for="payment-amount" style="display: block; margin-bottom: 8px; font-weight: bold;">Monto
-                    Abonado:</label>
-                <div
-                    style="display: flex; align-items: center; border: 1px solid #ccc; border-radius: 8px; padding: 0 12px; background: #f9fafb;">
-                    <span style="font-weight: bold; color: #666;">$</span>
-                    <input type="number" id="payment-amount" step="0.01"
-                        style="width: 100%; padding: 12px; border: none; background: transparent; font-size: 1.2rem; outline: none;">
+                
+                <div id="account-row" style="display: flex; align-items: center; justify-content: space-between; background: #f1f5f9; padding: 10px; border-radius: 10px; border: 1px dashed #cbd5e1;">
+                    <label style="font-weight: 600; color: #64748b;">💳 Cta. Corriente</label>
+                    <div style="display: flex; align-items: center; background: transparent; padding: 0 10px; width: 140px;">
+                        <span style="color: #94a3b8; font-weight: bold;">$</span>
+                        <input type="number" id="pay-account" step="0.01" value="0" readonly style="width: 100%; padding: 10px; border: none; outline: none; text-align: right; font-weight: 700; color: #475569; background: transparent;">
+                    </div>
                 </div>
-                <small style="color: #666; display: block; margin-top: 4px;">Dejar vacío o igual al total para pago
-                    completo.</small>
+                
+                <div style="margin-top: 10px; padding: 15px; border-radius: 12px; background: var(--primary-color); color: white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.9rem; opacity: 0.9;">Total Abonado</span>
+                        <span id="total-paid-display" style="font-size: 1.4rem; font-weight: 800;">$0.00</span>
+                    </div>
+                    <div id="change-display" style="display: none; justify-content: space-between; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2);">
+                        <span style="font-size: 0.9rem; opacity: 0.9;">Vuelto</span>
+                        <span id="change-amount" style="font-size: 1.2rem; font-weight: 700; color: #4ade80;">$0.00</span>
+                    </div>
+                </div>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
@@ -143,6 +139,13 @@
                     style="padding: 12px; border: 1px solid #ccc; background: white; border-radius: 8px; cursor: pointer;">Cancelar</button>
                 <button onclick="confirmCheckout()" class="btn" style="padding: 12px; font-weight: bold;">✅
                     Confirmar</button>
+            </div>
+            
+            <div id="whatsapp-container" style="display: none; margin-top: 16px; border-top: 1px dashed #ccc; padding-top: 16px; text-align: center;">
+                <button id="whatsapp-btn" onclick="shareWhatsApp()" class="btn" style="background: #25d366; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <svg style="width: 20px; height: 20px; fill: white;" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                    Compartir por WhatsApp
+                </button>
             </div>
         </div>
     </div>

@@ -244,15 +244,59 @@ function checkout() {
     if (cart.length === 0) return alert('El carrito esta vacio');
 
     const clientSelect = document.getElementById('client-select');
+    const clientId = clientSelect ? clientSelect.value : null;
     const clientName = clientSelect ? clientSelect.options[clientSelect.selectedIndex].text : 'Casual';
     const total = cart.reduce((acc, item) => acc + (item.unit_price * item.quantity), 0);
 
     document.getElementById('modal-total-display').textContent = '$' + total.toFixed(2);
     document.getElementById('modal-client-display').textContent = clientName;
-    document.getElementById('payment-amount').value = total.toFixed(2);
+    
+    // Reset fields
+    document.getElementById('pay-cash').value = total.toFixed(2);
+    document.getElementById('pay-transfer').value = 0;
+    document.getElementById('pay-account').value = 0;
+    
+    // Show/Hide account row
+    document.getElementById('account-row').style.display = clientId ? 'flex' : 'none';
+    
+    calculateRemaining();
+    
     document.getElementById('payment-modal').style.display = 'flex';
-    document.getElementById('payment-amount').focus();
-    document.getElementById('payment-amount').select();
+    document.getElementById('pay-cash').focus();
+    document.getElementById('pay-cash').select();
+}
+
+function calculateRemaining() {
+    const totalText = document.getElementById('modal-total-display').innerText.replace('$', '');
+    const total = parseFloat(totalText);
+    
+    const cash = parseFloat(document.getElementById('pay-cash').value) || 0;
+    const transfer = parseFloat(document.getElementById('pay-transfer').value) || 0;
+    
+    const totalPaid = cash + transfer;
+    const remaining = total - totalPaid;
+    
+    document.getElementById('total-paid-display').textContent = '$' + totalPaid.toFixed(2);
+    
+    const clientSelect = document.getElementById('client-select');
+    const clientId = clientSelect ? clientSelect.value : null;
+
+    if (remaining > 0) {
+        if (clientId) {
+            document.getElementById('pay-account').value = remaining.toFixed(2);
+            document.getElementById('change-display').style.display = 'none';
+        } else {
+            document.getElementById('pay-account').value = 0;
+            document.getElementById('change-display').style.display = 'none';
+        }
+    } else if (remaining < 0) {
+        document.getElementById('pay-account').value = 0;
+        document.getElementById('change-display').style.display = 'flex';
+        document.getElementById('change-amount').textContent = '$' + Math.abs(remaining).toFixed(2);
+    } else {
+        document.getElementById('pay-account').value = 0;
+        document.getElementById('change-display').style.display = 'none';
+    }
 }
 
 function closePaymentModal() {
@@ -262,12 +306,17 @@ function closePaymentModal() {
 async function confirmCheckout() {
     const clientSelect = document.getElementById('client-select');
     const clientId = clientSelect ? clientSelect.value : null;
-    const amountPaid = parseFloat(document.getElementById('payment-amount').value);
-    const paymentMethod = document.getElementById('payment-method').value;
-
-    if (isNaN(amountPaid) || amountPaid < 0) {
-        return alert('Por favor ingrese un monto valido');
-    }
+    
+    const cash = parseFloat(document.getElementById('pay-cash').value) || 0;
+    const transfer = parseFloat(document.getElementById('pay-transfer').value) || 0;
+    const account = parseFloat(document.getElementById('pay-account').value) || 0;
+    
+    const amountPaid = cash + transfer;
+    
+    let paymentMethod = 'cash';
+    if (cash > 0 && transfer > 0) paymentMethod = 'Efectivo + Transf.';
+    else if (transfer > 0) paymentMethod = 'transfer';
+    else if (account > 0 && amountPaid === 0) paymentMethod = 'account';
 
     const salesData = {
         items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
@@ -276,7 +325,7 @@ async function confirmCheckout() {
         payment_method: paymentMethod
     };
 
-    const btn = document.querySelector('#payment-modal .btn');
+    const btn = document.querySelector('#payment-modal .btn:not([onclick*="close"])');
     const originalText = btn.innerText;
     btn.disabled = true;
     btn.innerText = 'Procesando...';
@@ -290,34 +339,91 @@ async function confirmCheckout() {
 
         if (res.ok) {
             const sale = await res.json();
-            closePaymentModal();
-            if (confirm('Venta realizada con exito. Desea generar el remito?')) {
-                window.open(`/sales/${sale.id}/remito`, '_blank');
+            
+            // Handle WhatsApp button
+            if (clientId && account > 0) {
+                document.getElementById('whatsapp-container').style.display = 'block';
+                // Store sale info for whatsapp
+                window.lastSale = {
+                    id: sale.id,
+                    total: cart.reduce((acc, item) => acc + (item.unit_price * item.quantity), 0),
+                    paid: amountPaid,
+                    debt: account,
+                    client: allClients.find(c => c.id == clientId)
+                };
             }
-            cart = [];
-            updateCart();
-            const pRes = await fetch('/api/products');
-            allProducts = await pRes.json();
-            renderProducts(allProducts);
+
+            Swal.fire({
+                title: 'Venta exitosa',
+                text: '¿Desea generar el remito?',
+                icon: 'success',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, imprimir',
+                cancelButtonText: 'No'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.open(`/sales/${sale.id}/remito`, '_blank');
+                }
+                if (!window.lastSale || window.lastSale.debt === 0) {
+                    closePaymentModal();
+                    resetAfterSale();
+                }
+            });
+            
         } else {
             const err = await res.json();
             alert('Error: ' + err.detail);
+            btn.disabled = false;
+            btn.innerText = originalText;
         }
     } catch (e) {
         console.error(e);
         alert('Error de conexion o proceso: ' + e.message);
-    } finally {
         btn.disabled = false;
         btn.innerText = originalText;
     }
 }
 
+function resetAfterSale() {
+    cart = [];
+    updateCart();
+    fetch('/api/products').then(res => res.json()).then(data => {
+        allProducts = data;
+        renderProducts(allProducts);
+    });
+    document.getElementById('whatsapp-container').style.display = 'none';
+    window.lastSale = null;
+}
+
+function shareWhatsApp() {
+    if (!window.lastSale || !window.lastSale.client) return;
+    
+    const sale = window.lastSale;
+    const client = sale.client;
+    
+    if (!client.phone) {
+        return Swal.fire('Error', 'El cliente no tiene un numero de WhatsApp registrado', 'error');
+    }
+    
+    let phone = client.phone.replace(/\D/g, '');
+    // Ensure international format (assuming Argentina +54 if no 54 prefix)
+    if (!phone.startsWith('54')) phone = '54' + phone;
+    
+    const message = `Hola ${client.name}! Te comparto el detalle de tu compra:\n\n` +
+        `Total: $${sale.total.toFixed(2)}\n` +
+        `Pagado: $${sale.paid.toFixed(2)}\n` +
+        `Saldo a cuenta: $${sale.debt.toFixed(2)}\n\n` +
+        `Muchas gracias!`;
+        
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+    
+    closePaymentModal();
+    resetAfterSale();
+}
+
 function handlePaymentMethodChange() {
-    const method = document.getElementById('payment-method').value;
-    const totalText = document.getElementById('modal-total-display').innerText.replace('$', '');
-    const total = parseFloat(totalText);
-    const amountInput = document.getElementById('payment-amount');
-    amountInput.value = method === 'account' ? 0 : total.toFixed(2);
+    // This is now handled by calculateRemaining and individual inputs
 }
 
 async function quickEditProduct(productId) {

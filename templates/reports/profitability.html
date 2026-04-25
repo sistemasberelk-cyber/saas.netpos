@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid px-4 py-5">
+    <div class="row align-items-center mb-4">
+        <div class="col-md-6">
+            <h1 class="h2 text-white mb-0">Reporte de Rentabilidad</h1>
+            <p class="text-muted">Análisis de utilidad neta basado en costos históricos.</p>
+        </div>
+        <div class="col-md-6 text-end">
+            <form action="/reports/profitability" method="get" class="d-inline-flex gap-2">
+                <input type="date" name="start_date" class="form-control bg-dark border-secondary text-white" value="{{ start_date }}">
+                <input type="date" name="end_date" class="form-control bg-dark border-secondary text-white" value="{{ end_date }}">
+                <button type="submit" class="btn btn-primary">Filtrar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Resumen de Métricas -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-4">
+            <div class="card bg-dark border-secondary h-100">
+                <div class="card-body p-4 text-center">
+                    <h6 class="text-uppercase text-muted fw-bold small">Ingresos Totales</h6>
+                    <div class="h2 text-white my-3">${{ "{:,.2f}".format(total_revenue) }}</div>
+                    <div class="small text-info">Bruto acumulado</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-dark border-secondary h-100">
+                <div class="card-body p-4 text-center">
+                    <h6 class="text-uppercase text-muted fw-bold small">Costo de Mercadería</h6>
+                    <div class="h2 text-warning my-3">${{ "{:,.2f}".format(total_cost) }}</div>
+                    <div class="small text-warning">Precio de costo al momento de venta</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-primary border-primary h-100 shadow-lg">
+                <div class="card-body p-4 text-center">
+                    <h6 class="text-uppercase text-white-50 fw-bold small">Utilidad Neta</h6>
+                    <div class="h2 text-white my-3">${{ "{:,.2f}".format(profit) }}</div>
+                    <div class="badge bg-white text-primary fs-6">{{ "{:.1f}".format(margin) }}% Margen</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Visualización Concepto Gráfico -->
+    <div class="card bg-dark border-secondary mb-5">
+        <div class="card-header border-secondary bg-transparent p-4">
+            <h5 class="mb-0 text-white">Desglose de Operación</h5>
+        </div>
+        <div class="card-body p-4 text-center">
+            <div class="progress mb-4" style="height: 40px; background-color: rgba(255,255,255,0.05);">
+                <div class="progress-bar bg-warning" role="progressbar" style="width: {{ (total_cost / total_revenue * 100) if total_revenue > 0 else 0 }}%" 
+                     aria-valuenow="{{ total_cost }}" aria-valuemin="0" aria-valuemax="{{ total_revenue }}">
+                    COSTO
+                </div>
+                <div class="progress-bar bg-success" role="progressbar" style="width: {{ (profit / total_revenue * 100) if total_revenue > 0 else 0 }}%" 
+                     aria-valuenow="{{ profit }}" aria-valuemin="0" aria-valuemax="{{ total_revenue }}">
+                    GANANCIA
+                </div>
+            </div>
+            <p class="text-muted small">Representación visual del margen sobre ingresos brutos.</p>
+        </div>
+    </div>
+
+    <div class="alert alert-info border-info bg-dark text-info p-4">
+        <i class="bi bi-info-circle-fill me-2"></i>
+        <strong>Dato de Auditoría:</strong> Este reporte utiliza el campo <code>cost_price_at_sale</code>, lo que garantiza que la ganancia reflejada es la real del momento de la transacción, incluso si los costos unitarios del producto han cambiado posteriormente.
+    </div>
+</div>
+
+<style>
+    .card { transition: transform 0.2s; }
+    .card:hover { transform: translateY(-5px); }
+    .progress-bar { font-weight: bold; font-size: 11px; letter-spacing: 1px; }
+</style>
+{% endblock %}

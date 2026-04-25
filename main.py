@@ -450,6 +450,224 @@ def update_product_api(
     session.commit()
     return product
 
+@app.get("/reports/profitability", response_class=HTMLResponse)
+def get_profitability_report(
+    request: Request, 
+    start_date: Optional[str] = None, 
+    end_date: Optional[str] = None,
+    user: User = Depends(require_auth), 
+    tenant_id: int = Depends(get_tenant), 
+    session: Session = Depends(get_session)
+):
+    # Default range: current month
+    if not start_date:
+        start_date = date.today().replace(day=1).strftime("%Y-%m-%d")
+    if not end_date:
+        end_date = date.today().strftime("%Y-%m-%d")
+
+    s_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    e_dt = datetime.combine(datetime.strptime(end_date, "%Y-%m-%d"), datetime.max.time())
+
+    # Calculate net profit using historical cost captured at time of sale
+    from sqlalchemy import select
+    from database.models import SaleItem, Sale
+    
+    stmt = (
+        select(SaleItem)
+        .join(Sale)
+        .where(
+            Sale.tenant_id == tenant_id,
+            Sale.timestamp >= s_dt,
+            Sale.timestamp <= e_dt
+        )
+    )
+    items = session.exec(stmt).all()
+
+    total_revenue = 0.0
+    total_cost = 0.0
+    
+    for item in items:
+        qty = item.quantity or 0
+        price = item.unit_price or 0
+        cost = item.cost_price_at_sale or 0
+        total_revenue += (qty * price)
+        total_cost += (qty * cost)
+
+    profit = total_revenue - total_cost
+    margin = (profit / total_revenue * 100) if total_revenue > 0 else 0
+
+    return templates.TemplateResponse("reports/profitability.html", {
+        "request": request,
+        "total_revenue": total_revenue,
+        "total_cost": total_cost,
+        "profit": profit,
+        "margin": margin,
+        "start_date": start_date,
+        "end_date": end_date,
+        "user": user,
+        "settings": Depends(get_settings)
+    })
+
+@app.get("/reports/cash-flow", response_class=HTMLResponse)
+def get_cash_flow_report(
+    request: Request, 
+    date_filter: Optional[str] = None,
+    user: User = Depends(require_auth), 
+    tenant_id: int = Depends(get_tenant), 
+    session: Session = Depends(get_session)
+):
+    if not date_filter:
+        date_filter = date.today().strftime("%Y-%m-%d")
+
+    target_date_start = datetime.strptime(date_filter, "%Y-%m-%d").replace(hour=0, minute=0, second=0)
+    target_date_end = datetime.strptime(date_filter, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+
+    from database.models import CashMovement
+    stmt = (
+        select(CashMovement)
+        .where(
+            CashMovement.tenant_id == tenant_id,
+            CashMovement.timestamp >= target_date_start,
+            CashMovement.timestamp <= target_date_end
+        )
+        .order_by(CashMovement.timestamp.desc())
+    )
+    movements = session.exec(stmt).all()
+
+    total_in_cash = 0.0
+    total_in_transfer = 0.0
+    total_out = 0.0
+    
+    for m in movements:
+        amt = m.amount or 0.0
+        if amt > 0:
+            if "transferencia" in m.concept.lower() or "transfer" in m.concept.lower():
+                total_in_transfer += amt
+            else:
+                total_in_cash += amt
+        else:
+            total_out += abs(amt)
+
+    balance = (total_in_cash + total_in_transfer) - total_out
+
+    return templates.TemplateResponse("reports/cash_flow.html", {
+        "request": request,
+        "date": date_filter,
+        "movements": movements,
+        "total_in_cash": total_in_cash,
+        "total_in_transfer": total_in_transfer,
+        "total_out": total_out,
+        "balance": balance,
+        "user": user,
+        "settings": Depends(get_settings)
+    })
+
+@app.get("/clients/{client_id}/account-statement", response_class=HTMLResponse)
+def get_client_statement_print(
+    request: Request, 
+    client_id: int, 
+    user: User = Depends(require_auth), 
+    tenant_id: int = Depends(get_tenant), 
+    session: Session = Depends(get_session)
+):
+    from database.models import Client, Sale, Payment, PaymentAllocation
+    client = session.exec(select(Client).where(Client.id == client_id, Client.tenant_id == tenant_id)).first()
+    if not client: raise HTTPException(404)
+
+    sales = session.exec(select(Sale).where(Sale.client_id == client_id, Sale.tenant_id == tenant_id)).all()
+    total_debt = sum([s.total_amount for s in sales])
+
+    payments = session.exec(select(Payment).where(Payment.client_id == client_id, Payment.tenant_id == tenant_id)).all()
+    total_paid = sum([p.amount for p in payments])
+    
+    invoice_data = []
+    for s in sales:
+        allocated = session.exec(
+            select(func.sum(PaymentAllocation.amount_applied))
+            .where(PaymentAllocation.sale_id == s.id)
+        ).one() or 0.0
+        
+        pending_on_invoice = s.total_amount - allocated
+        if pending_on_invoice > 0.01:
+            invoice_data.append({
+                "id": s.id,
+                "date": s.timestamp,
+                "total": s.total_amount,
+                "pending": pending_on_invoice,
+                "age_days": (datetime.now() - s.timestamp).days
+            })
+
+    return templates.TemplateResponse("reports/client_statement_pdf.html", {
+        "request": request,
+        "client": client,
+        "invoice_data": invoice_data,
+        "total_debt": total_debt,
+        "total_paid": total_paid,
+        "balance": total_debt - total_paid,
+        "settings": Depends(get_settings)
+    })
+
+@app.post("/api/products/import")
+async def import_products_excel(
+    file: UploadFile = File(...), 
+    session: Session = Depends(get_session), 
+    tenant_id: int = Depends(get_tenant), 
+    user: User = Depends(require_auth)
+):
+    if user.role != "admin": raise HTTPException(403)
+    
+    ext = file.filename.split(".")[-1].lower()
+    contents = await file.read()
+    
+    try:
+        if ext == "csv":
+            df = pd.read_csv(io.BytesIO(contents))
+        else:
+            df = pd.read_excel(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(400, f"Error reading file: {str(e)}")
+
+    df.columns = [c.lower().strip() for c in df.columns]
+    
+    processed = 0
+    updated = 0
+    
+    for _, row in df.iterrows():
+        p_name = row.get("nombre") or row.get("name")
+        p_price = row.get("precio") or row.get("price") or 0
+        p_cost = row.get("costo") or row.get("cost") or 0
+        p_stock = row.get("stock") or 0
+        p_barcode = str(row.get("codigo") or row.get("barcode") or "").strip()
+        
+        if not p_name: continue
+        
+        existing = None
+        if p_barcode and p_barcode != "nan":
+            existing = session.exec(select(Product).where(Product.barcode == p_barcode, Product.tenant_id == tenant_id)).first()
+        else:
+            existing = session.exec(select(Product).where(Product.name == p_name, Product.tenant_id == tenant_id)).first()
+            
+        if existing:
+            existing.price = float(p_price)
+            existing.cost_price = float(p_cost)
+            existing.stock_quantity = int(p_stock)
+            session.add(existing)
+            updated += 1
+        else:
+            new_prod = Product(
+                tenant_id=tenant_id,
+                name=str(p_name),
+                price=float(p_price),
+                cost_price=float(p_cost),
+                stock_quantity=int(p_stock),
+                barcode=p_barcode if (p_barcode and p_barcode != "nan") else None
+            )
+            session.add(new_prod)
+            processed += 1
+            
+    session.commit()
+    return {"status": "success", "created": processed, "updated": updated}
+
 @app.delete("/api/products/{id}")
 def delete_product_api(id: int, session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
     product = session.get(Product, id)
@@ -1242,27 +1460,8 @@ def bulk_update_price(
     session.commit()
     return {"status": "success", "updated_count": count}
 
-# Taxes
-@app.get("/api/taxes")
-def get_taxes(session: Session = Depends(get_session)):
-    return session.exec(select(Tax)).all()
 
-@app.post("/api/taxes")
-def create_tax(name: str = Form(...), rate: float = Form(...), session: Session = Depends(get_session), user: User = Depends(require_auth)):
-    if user.role != "admin": raise HTTPException(403)
-    tax = Tax(name=name, rate=rate)
-    session.add(tax)
-    session.commit()
-    return tax
-
-@app.delete("/api/taxes/{id}")
-def delete_tax(id: int, session: Session = Depends(get_session), user: User = Depends(require_auth)):
-    if user.role != "admin": raise HTTPException(403)
-    tax = session.get(Tax, id)
-    if tax:
-        session.delete(tax)
-        session.commit()
-    return {"ok": True}
+# SEED TEST DATA
 
 # --- Test Data Seeder (Temporary) ---
 @app.get("/api/test/seed_products")
