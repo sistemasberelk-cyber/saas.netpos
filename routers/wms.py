@@ -29,18 +29,30 @@ def _ensure_wms_schema_compat(session: Session):
         return
 
     stmts = [
+        "ALTER TABLE location ADD COLUMN IF NOT EXISTS tenant_id INTEGER",
         "ALTER TABLE location ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
         "ALTER TABLE location ADD COLUMN IF NOT EXISTS created_at TIMESTAMP",
+        "ALTER TABLE bin ADD COLUMN IF NOT EXISTS tenant_id INTEGER",
         "ALTER TABLE bin ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
         "ALTER TABLE bin ADD COLUMN IF NOT EXISTS max_capacity INTEGER",
+        "ALTER TABLE binstock ADD COLUMN IF NOT EXISTS tenant_id INTEGER",
+        "ALTER TABLE binstock ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+        "ALTER TABLE stockmovement ADD COLUMN IF NOT EXISTS tenant_id INTEGER",
         "ALTER TABLE stockmovement ADD COLUMN IF NOT EXISTS request_id VARCHAR",
         "ALTER TABLE stockmovement ADD COLUMN IF NOT EXISTS user_id INTEGER",
-        "ALTER TABLE binstock ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+        "ALTER TABLE cashmovement ADD COLUMN IF NOT EXISTS reference_id INTEGER",
+        "ALTER TABLE cashmovement ADD COLUMN IF NOT EXISTS reference_type VARCHAR",
+        "ALTER TABLE cashmovement ADD COLUMN IF NOT EXISTS user_id INTEGER",
     ]
     for stmt in stmts:
-        session.exec(text(stmt))
-    session.commit()
+        try:
+            session.exec(text(stmt))
+            session.commit()
+        except Exception:
+            session.rollback()
+            continue
     _wms_schema_checked = True
+
 
 
 
