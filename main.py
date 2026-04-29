@@ -379,15 +379,66 @@ def trigger_backup(request: Request, user: User = Depends(require_auth), setting
         sale.is_closed = True
         session.add(sale)
         
-    # Marcador de Cierre de Caja
-    cierre_marker = CashMovement(
-        tenant_id=tenant_id,
-        movement_type="cierre",
-        amount=0.0,
-        concept="CIERRE_DE_CAJA",
-        timestamp=datetime.now(timezone.utc)
-    )
-    session.add(cierre_marker)
+    # --- 2. Calcular Balance Actual para el Cierre ---
+    from sqlalchemy import func
+    from datetime import date, timedelta
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_end = today_start + timedelta(days=1)
+    
+    movements = session.exec(
+        select(CashMovement).where(
+            CashMovement.tenant_id == tenant_id,
+            CashMovement.timestamp >= today_start,
+            CashMovement.timestamp < today_end,
+        )
+    ).all()
+    
+    t_in = 0.0
+    t_out = 0.0
+    for m in movements:
+        amt = m.amount or 0.0
+        if amt > 0 and m.movement_type == "in":
+            t_in += amt
+        else:
+            t_out += abs(amt)
+            
+    # Sumar ventas no registradas en CashMovement
+    m_sale_ids = {m.reference_id for m in movements if m.reference_type == "sale" and m.reference_id}
+    sales_to_sum = session.exec(
+        select(Sale).where(
+            Sale.tenant_id == tenant_id,
+            Sale.timestamp >= today_start,
+            Sale.timestamp < today_end,
+            Sale.amount_paid > 0
+        )
+    ).all()
+    for s in sales_to_sum:
+        if s.id not in m_sale_ids:
+            t_in += (s.amount_paid or 0.0)
+            
+    current_balance = t_in - t_out
+    
+    # --- 3. Registrar Movimiento de Cierre (Retiro de Fondos) ---
+    if current_balance > 0:
+        cierre_withdrawal = CashMovement(
+            tenant_id=tenant_id,
+            user_id=user.id,
+            amount=current_balance, # Se guarda positivo, pero tipo 'out'
+            movement_type="out",
+            concept=f"CIERRE_DE_CAJA: Retiro de Saldo Diario",
+            timestamp=datetime.now(timezone.utc)
+        )
+        session.add(cierre_withdrawal)
+    else:
+        # Solo marcador si el balance es 0 o negativo
+        cierre_marker = CashMovement(
+            tenant_id=tenant_id,
+            movement_type="cierre",
+            amount=0.0,
+            concept="CIERRE_DE_CAJA (Balance 0)",
+            timestamp=datetime.now(timezone.utc)
+        )
+        session.add(cierre_marker)
     
     session.commit()
     
