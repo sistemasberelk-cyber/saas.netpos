@@ -275,8 +275,9 @@ function removeFromCart(lineKey) {
     saveCartState();
 }
 
-function checkout() {
+function openCheckoutModal() {
     if (cart.length === 0) return alert('El carrito esta vacio');
+    saveCartState();
 
     const clientSelect = document.getElementById('client-select');
     const clientName = clientSelect && clientSelect.value ? clientSelect.options[clientSelect.selectedIndex].text : 'Casual';
@@ -302,6 +303,17 @@ function checkout() {
     document.getElementById('pay-cash').focus();
     document.getElementById('pay-cash').select();
 }
+
+// Backward compatibility in case old inline handlers still call checkout()
+window.checkout = openCheckoutModal;
+window.openCheckoutModal = openCheckoutModal;
+
+document.addEventListener('DOMContentLoaded', () => {
+    const checkoutBtn = document.getElementById('btn-checkout');
+    if (checkoutBtn) {
+        checkoutBtn.addEventListener('click', openCheckoutModal);
+    }
+});
 
 function calculateRemaining() {
     const totalText = document.getElementById('modal-total-display').innerText.replace('$', '');
