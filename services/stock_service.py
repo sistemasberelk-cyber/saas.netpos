@@ -127,21 +127,6 @@ class StockService:
         
         session.add(sale)
         session.flush()
-
-        # Register cash movement for immediate cash inflows
-        # (only when there is an actual payment in this sale).
-        if final_amount_paid > 0:
-            session.add(
-                CashMovement(
-                    tenant_id=tenant_id,
-                    user_id=user_id,
-                    amount=abs(final_amount_paid),
-                    movement_type="in",
-                    concept=f"Venta #{sale.id or 'N/A'}",
-                    reference_id=sale.id,
-                    reference_type="sale",
-                )
-            )
         
         # Handle Payment if Client is selected
         if client_id and final_amount_paid > 0:

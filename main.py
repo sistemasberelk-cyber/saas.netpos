@@ -1154,6 +1154,20 @@ def get_cash_book(
         or 0.0
     )
 
+    # Add paid sales as implicit income to keep Caja totals aligned even if
+    # explicit CashMovement rows were not generated for sales.
+    paid_sales_in = (
+        session.exec(
+            select(func.sum(Sale.amount_paid)).where(
+                Sale.tenant_id == tenant_id,
+                Sale.timestamp >= day_start,
+                Sale.timestamp < day_end,
+                Sale.amount_paid > 0,
+            )
+        ).one()
+        or 0.0
+    )
+    total_in = float(total_in or 0.0) + float(paid_sales_in or 0.0)
     balance = float(total_in + total_out)  # Out is negative
 
     return templates.TemplateResponse(
