@@ -1319,10 +1319,31 @@ def print_labels_v2(
     from sqlmodel import col
     try:
         item_ids = json.loads(selected_items)
-    except:
-        raise HTTPException(400, "Invalid JSON selection")
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise HTTPException(400, "Invalid JSON selection") from exc
+
+    if not isinstance(item_ids, list):
+        raise HTTPException(400, "Selection must be a JSON array")
+
+    validated_item_ids = []
+    for item_id in item_ids:
+        try:
+            numeric_id = int(item_id)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, "Selection must only contain numeric ids") from exc
+        if numeric_id <= 0:
+            raise HTTPException(400, "Selection must only contain positive ids")
+        validated_item_ids.append(numeric_id)
+
+    if not validated_item_ids:
+        raise HTTPException(400, "No products were selected")
         
-    products = session.exec(select(Product).where(col(Product.id).in_(item_ids), Product.tenant_id == tenant_id)).all()
+    products = session.exec(
+        select(Product).where(
+            col(Product.id).in_(validated_item_ids),
+            Product.tenant_id == tenant_id,
+        )
+    ).all()
     
     # Prepare data for template
     labels_data = []
