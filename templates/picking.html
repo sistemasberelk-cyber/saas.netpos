@@ -205,6 +205,14 @@
 
     function startLegacyScanner() {
         document.getElementById('reader').innerHTML = ''; // Limpiar UI previa
+        if (typeof Html5QrcodeScanner === 'undefined' || typeof Html5QrcodeSupportedFormats === 'undefined') {
+            document.getElementById('reader').innerHTML = `
+                <div style="color:#dc2626; background:#fee2e2; border:1px solid #fecaca; padding:12px; border-radius:8px;">
+                    No se pudo cargar la librería de escaneo. Verifica conexión a internet y recarga.
+                </div>
+            `;
+            return;
+        }
         if (html5QrcodeScanner === null) {
             html5QrcodeScanner = new Html5QrcodeScanner(
                 "reader",

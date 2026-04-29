@@ -46,10 +46,17 @@ def picking_entry(
     user: User = Depends(require_auth),
     tenant_id: int = Depends(get_tenant),
 ):
-    product = _find_product(session, tenant_id, barcode.strip())
+    normalized_barcode = barcode.strip()
+    if not normalized_barcode:
+        raise HTTPException(400, "El código de barras no puede estar vacío")
+    if qty <= 0:
+        raise HTTPException(400, "La cantidad debe ser mayor a 0")
+
+    product = _find_product(session, tenant_id, normalized_barcode)
     if not product:
-        raise HTTPException(404, f"Producto no encontrado: {barcode.strip()}")
-    product.stock_quantity += qty
+        raise HTTPException(404, f"Producto no encontrado: {normalized_barcode}")
+    current_stock = product.stock_quantity or 0
+    product.stock_quantity = current_stock + qty
     session.add(product)
     session.commit()
     session.refresh(product)
@@ -72,13 +79,25 @@ def picking_exit(
     user: User = Depends(require_auth),
     tenant_id: int = Depends(get_tenant),
 ):
+    if not data.items:
+        raise HTTPException(400, "Debes enviar al menos un item")
+
     products_map = {}
     total_amount = 0.0
     for item in data.items:
-        prod = _find_product(session, tenant_id, item.barcode.strip())
+        normalized_barcode = item.barcode.strip()
+        if not normalized_barcode:
+            raise HTTPException(400, "Todos los items deben tener código de barras")
+        if item.qty <= 0:
+            raise HTTPException(400, "Todas las cantidades deben ser mayores a 0")
+
+        prod = _find_product(session, tenant_id, normalized_barcode)
         if not prod:
             raise HTTPException(404, f"Producto no encontrado: {item.barcode}")
-        products_map[item.barcode] = prod
+        current_stock = prod.stock_quantity or 0
+        if current_stock < item.qty:
+            raise HTTPException(409, f"Stock insuficiente para {prod.name}: disponible {current_stock}, solicitado {item.qty}")
+        products_map[normalized_barcode] = prod
         total_amount += prod.price * item.qty
 
     new_sale = Sale(tenant_id=tenant_id, client_id=None, user_id=user.id, total_amount=total_amount)
@@ -87,7 +106,8 @@ def picking_exit(
     session.refresh(new_sale)
 
     for item in data.items:
-        prod = products_map[item.barcode]
+        normalized_barcode = item.barcode.strip()
+        prod = products_map[normalized_barcode]
         session.add(
             SaleItem(
                 sale_id=new_sale.id,
@@ -98,7 +118,8 @@ def picking_exit(
                 total=prod.price * item.qty,
             )
         )
-        prod.stock_quantity -= item.qty
+        current_stock = prod.stock_quantity or 0
+        prod.stock_quantity = current_stock - item.qty
         session.add(prod)
 
     session.commit()
