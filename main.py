@@ -380,65 +380,67 @@ def trigger_backup(request: Request, user: User = Depends(require_auth), setting
         session.add(sale)
         
     # --- 2. Calcular Balance Actual para el Cierre ---
-    from sqlalchemy import func
-    from datetime import date, timedelta
-    today_start = datetime.combine(date.today(), datetime.min.time())
-    today_end = today_start + timedelta(days=1)
+    # Usamos la misma lógica que get_cash_book pero para 'ahora'
+    # Importante: Usamos UTC para la base de datos
+    today_utc = datetime.now(timezone.utc).date()
+    start_of_day = datetime.combine(today_utc, datetime.min.time()).replace(tzinfo=timezone.utc)
+    end_of_day = start_of_day + timedelta(days=1)
     
-    movements = session.exec(
+    # Sumar Movimientos de Caja
+    movements_today = session.exec(
         select(CashMovement).where(
             CashMovement.tenant_id == tenant_id,
-            CashMovement.timestamp >= today_start,
-            CashMovement.timestamp < today_end,
+            CashMovement.timestamp >= start_of_day,
+            CashMovement.timestamp < end_of_day,
         )
     ).all()
     
-    t_in = 0.0
-    t_out = 0.0
-    for m in movements:
+    val_in = 0.0
+    val_out = 0.0
+    for m in movements_today:
         amt = m.amount or 0.0
         if amt > 0 and m.movement_type == "in":
-            t_in += amt
+            val_in += amt
         else:
-            t_out += abs(amt)
+            val_out += abs(amt)
             
-    # Sumar ventas no registradas en CashMovement
-    m_sale_ids = {m.reference_id for m in movements if m.reference_type == "sale" and m.reference_id}
-    sales_to_sum = session.exec(
+    # Sumar Ventas no registradas
+    registered_sale_ids = {m.reference_id for m in movements_today if m.reference_type == "sale" and m.reference_id}
+    unrecorded_sales = session.exec(
         select(Sale).where(
             Sale.tenant_id == tenant_id,
-            Sale.timestamp >= today_start,
-            Sale.timestamp < today_end,
+            Sale.timestamp >= start_of_day,
+            Sale.timestamp < end_of_day,
             Sale.amount_paid > 0
         )
     ).all()
-    for s in sales_to_sum:
-        if s.id not in m_sale_ids:
-            t_in += (s.amount_paid or 0.0)
-            
-    current_balance = t_in - t_out
     
-    # --- 3. Registrar Movimiento de Cierre (Retiro de Fondos) ---
-    if current_balance > 0:
-        cierre_withdrawal = CashMovement(
+    for s in unrecorded_sales:
+        if s.id not in registered_sale_ids:
+            val_in += (s.amount_paid or 0.0)
+            
+    current_balance = val_in - val_out
+    print(f"DEBUG: Cierre de Caja - Tenant: {tenant_id}, Balance Detectado: {current_balance}")
+    
+    # --- 3. Registrar Movimiento de Cierre ---
+    if current_balance > 0.01: # Evitar decimales ínfimos
+        cierre_move = CashMovement(
             tenant_id=tenant_id,
             user_id=user.id,
-            amount=current_balance, # Se guarda positivo, pero tipo 'out'
-            movement_type="out",
-            concept=f"CIERRE_DE_CAJA: Retiro de Saldo Diario",
+            amount=current_balance,
+            movement_type="out", # Es un retiro
+            concept=f"CIERRE_DE_CAJA: Retiro de Saldo (${current_balance:.2f})",
             timestamp=datetime.now(timezone.utc)
         )
-        session.add(cierre_withdrawal)
+        session.add(cierre_move)
     else:
-        # Solo marcador si el balance es 0 o negativo
-        cierre_marker = CashMovement(
+        session.add(CashMovement(
             tenant_id=tenant_id,
             movement_type="cierre",
             amount=0.0,
-            concept="CIERRE_DE_CAJA (Balance 0)",
+            concept="CIERRE_DE_CAJA (Sin saldo pendiente)",
             timestamp=datetime.now(timezone.utc)
-        )
-        session.add(cierre_marker)
+        ))
     
     session.commit()
     
@@ -1200,7 +1202,7 @@ def get_cash_book(
     except ValueError:
         target_date = date.today()
 
-    day_start = datetime.combine(target_date, datetime.min.time())
+    day_start = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=timezone.utc)
     day_end = day_start + timedelta(days=1)
 
     movements = session.exec(
