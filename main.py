@@ -1314,6 +1314,10 @@ def print_labels_v2(
     session: Session = Depends(get_session),
     tenant_id: int = Depends(get_tenant)
 ):
+    allowed_layout_types = {"exhibition", "list", "100x50", "90x60", "100x60", "100x65"}
+    if layout_type not in allowed_layout_types:
+        raise HTTPException(400, "Invalid layout type")
+
     # Manual conversion because checkbox default handling can be tricky
     should_hide_price = False
     if hide_price and str(hide_price).lower() in ["true", "on", "1", "yes"]:
@@ -1321,6 +1325,9 @@ def print_labels_v2(
 
     import json
     from sqlmodel import col
+    if len(selected_items) > 20_000:
+        raise HTTPException(400, "Selection payload is too large")
+
     try:
         item_ids = json.loads(selected_items)
     except (json.JSONDecodeError, TypeError) as exc:
@@ -1376,7 +1383,12 @@ def print_labels_v2(
     
     for p in products:
         # Generate Barcode Image if not exists
-        bc_filename = re.sub(r"[^A-Za-z0-9._-]", "_", str(p.barcode)).strip("._-")
+        barcode_value = str(p.barcode or "").strip()
+        if not barcode_value:
+            logger.warning("Skipping barcode generation for product id=%s due to empty barcode", p.id)
+            continue
+
+        bc_filename = re.sub(r"[^A-Za-z0-9._-]", "_", barcode_value).strip("._-")
         if not bc_filename:
             logger.warning("Skipping barcode generation for product id=%s due to invalid barcode value", p.id)
             continue
@@ -1386,7 +1398,7 @@ def print_labels_v2(
         if not os.path.exists(full_path + ".png"):
             try:
                 # Generate
-                my_code = Code128(p.barcode, writer=ImageWriter())
+                my_code = Code128(barcode_value, writer=ImageWriter())
                 my_code.save(full_path)
             except Exception as e:
                 logger.exception("Error generating barcode for product id=%s name=%s", p.id, p.name)
@@ -1394,12 +1406,15 @@ def print_labels_v2(
         labels_data.append({
             "name": p.name,
             "price": p.price_retail if p.price_retail else p.price, # Use Retail price if set
-            "barcode": p.barcode,
+            "barcode": barcode_value,
             "barcode_file": f"{bc_filename}.png",
             "category": p.category,
             "description": p.description,
             "item_number": p.item_number
         })
+
+    if not labels_data:
+        raise HTTPException(422, "No valid labels could be generated")
         
     if layout_type == "exhibition":
         # 100x65mm (approx) - Exhibition cards
