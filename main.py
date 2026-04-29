@@ -395,12 +395,17 @@ def trigger_backup(request: Request, user: User = Depends(require_auth), setting
         )
     ).all()
     
-    val_in = 0.0
+    val_in_cash = 0.0
+    val_in_transfer = 0.0
     val_out = 0.0
     for m in movements_today:
         amt = m.amount or 0.0
         if amt > 0 and m.movement_type == "in":
-            val_in += amt
+            is_transfer = bool(m.concept and ("transferencia" in m.concept.lower() or "transfer" in m.concept.lower()))
+            if is_transfer:
+                val_in_transfer += amt
+            else:
+                val_in_cash += amt
         else:
             val_out += abs(amt)
             
@@ -417,10 +422,17 @@ def trigger_backup(request: Request, user: User = Depends(require_auth), setting
     
     for s in unrecorded_sales:
         if s.id not in registered_sale_ids:
-            val_in += (s.amount_paid or 0.0)
+            val_in_cash += (s.amount_cash or 0.0)
+            val_in_transfer += (s.amount_transfer or 0.0)
+            if s.amount_cash == 0 and s.amount_transfer == 0 and s.amount_paid > 0:
+                if s.payment_method == "transfer":
+                    val_in_transfer += (s.amount_paid or 0.0)
+                else:
+                    val_in_cash += (s.amount_paid or 0.0)
             
-    current_balance = val_in - val_out
-    print(f"DEBUG: Cierre de Caja - Tenant: {tenant_id}, Balance Detectado: {current_balance}")
+    # En cierre retiramos solo efectivo físico, no transferencias.
+    current_balance = val_in_cash - val_out
+    print(f"DEBUG: Cierre de Caja - Tenant: {tenant_id}, Efectivo Detectado: {current_balance}, Transferencias: {val_in_transfer}")
     
     # --- 3. Registrar Movimiento de Cierre ---
     if current_balance > 0.01: # Evitar decimales ínfimos
