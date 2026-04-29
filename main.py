@@ -15,6 +15,8 @@ import io
 import shutil
 import uuid
 import json
+import logging
+import re
 
 import pandas as pd
 
@@ -29,6 +31,8 @@ from routers.wms import router as wms_router
 from web.dependencies import get_current_user, get_settings, get_tenant, require_auth
 import barcode
 from barcode.writer import ImageWriter
+
+logger = logging.getLogger(__name__)
 
 # Setup
 stock_service = StockService(static_dir="static/barcodes")
@@ -1337,13 +1341,27 @@ def print_labels_v2(
 
     if not validated_item_ids:
         raise HTTPException(400, "No products were selected")
-        
+
+    # Defensive constraints to keep request cost bounded and deterministic.
+    deduplicated_item_ids = list(dict.fromkeys(validated_item_ids))
+    max_items_per_request = 500
+    if len(deduplicated_item_ids) > max_items_per_request:
+        raise HTTPException(400, f"Selection exceeds max allowed items ({max_items_per_request})")
+
     products = session.exec(
         select(Product).where(
-            col(Product.id).in_(validated_item_ids),
+            col(Product.id).in_(deduplicated_item_ids),
             Product.tenant_id == tenant_id,
         )
     ).all()
+
+    found_ids = {product.id for product in products}
+    missing_ids = [item_id for item_id in deduplicated_item_ids if item_id not in found_ids]
+    if missing_ids:
+        raise HTTPException(404, f"Products not found for ids: {', '.join(map(str, missing_ids[:10]))}")
+
+    if not products:
+        raise HTTPException(404, "No products found for selected ids")
     
     # Prepare data for template
     labels_data = []
@@ -1358,7 +1376,10 @@ def print_labels_v2(
     
     for p in products:
         # Generate Barcode Image if not exists
-        bc_filename = f"{p.barcode}" # without extension for now, writer adds it
+        bc_filename = re.sub(r"[^A-Za-z0-9._-]", "_", str(p.barcode)).strip("._-")
+        if not bc_filename:
+            logger.warning("Skipping barcode generation for product id=%s due to invalid barcode value", p.id)
+            continue
         full_path = f"{static_bc_path}/{bc_filename}"
         
         # Check if file exists (Code128 writer adds .png)
@@ -1368,13 +1389,13 @@ def print_labels_v2(
                 my_code = Code128(p.barcode, writer=ImageWriter())
                 my_code.save(full_path)
             except Exception as e:
-                print(f"Error generating barcode for {p.name}: {e}")
+                logger.exception("Error generating barcode for product id=%s name=%s", p.id, p.name)
                 
         labels_data.append({
             "name": p.name,
             "price": p.price_retail if p.price_retail else p.price, # Use Retail price if set
             "barcode": p.barcode,
-            "barcode_file": f"{p.barcode}.png",
+            "barcode_file": f"{bc_filename}.png",
             "category": p.category,
             "description": p.description,
             "item_number": p.item_number
