@@ -124,6 +124,8 @@ class StockService:
             sale.payment_status = "pending"
             
         sale.amount_paid = final_amount_paid
+        sale.amount_cash = amt_cash
+        sale.amount_transfer = amt_transfer
         
         session.add(sale)
         session.flush()

@@ -59,6 +59,10 @@ def ensure_schema_compatibility(session: Session):
         "ALTER TABLE cashmovement ADD COLUMN IF NOT EXISTS reference_id INTEGER",
         "ALTER TABLE cashmovement ADD COLUMN IF NOT EXISTS reference_type VARCHAR",
         "ALTER TABLE cashmovement ADD COLUMN IF NOT EXISTS user_id INTEGER",
+        # Sales Hardening
+        "ALTER TABLE sale ADD COLUMN IF NOT EXISTS amount_cash FLOAT DEFAULT 0.0",
+        "ALTER TABLE sale ADD COLUMN IF NOT EXISTS amount_transfer FLOAT DEFAULT 0.0",
+        "ALTER TABLE sale ADD COLUMN IF NOT EXISTS payment_method VARCHAR DEFAULT 'cash'",
         # Products & Clients (Compatibility)
         "ALTER TABLE product ADD COLUMN IF NOT EXISTS price_bulk FLOAT",
         "ALTER TABLE product ADD COLUMN IF NOT EXISTS price_retail FLOAT",
@@ -621,6 +625,26 @@ def get_cash_flow_report(
         else:
             total_out += abs(amt)
 
+    from database.models import Sale
+    sales = session.exec(
+        select(Sale).where(
+            Sale.tenant_id == tenant_id,
+            Sale.timestamp >= target_date_start,
+            Sale.timestamp <= target_date_end,
+            Sale.amount_paid > 0
+        )
+    ).all()
+
+    for s in sales:
+        total_in_cash += (s.amount_cash or 0.0)
+        total_in_transfer += (s.amount_transfer or 0.0)
+        # Fallback for old sales without split fields
+        if s.amount_cash == 0 and s.amount_transfer == 0 and s.amount_paid > 0:
+            if s.payment_method == "transfer":
+                total_in_transfer += s.amount_paid
+            else:
+                total_in_cash += s.amount_paid
+
     balance = (total_in_cash + total_in_transfer) - total_out
 
     return templates.TemplateResponse("reports/cash_flow.html", {
@@ -1154,8 +1178,6 @@ def get_cash_book(
         or 0.0
     )
 
-    # Add paid sales as implicit income to keep Caja totals aligned even if
-    # explicit CashMovement rows were not generated for sales.
     paid_sales_in = (
         session.exec(
             select(func.sum(Sale.amount_paid)).where(
