@@ -251,6 +251,9 @@ function updateCart() {
                     <span style="color: #2563eb; font-weight: bold;">${item.price_type}</span>
                 </div>
             </td>
+            <td style="text-align: center; color: #334155; font-family: monospace;">
+                ${item.item_number || '-'}
+            </td>
             <td>
                 <div style="display: flex; align-items: center; gap: 4px;">
                     <button onclick="updateItemQty('${item.line_key}', -1)" style="width: 24px; height: 24px; border-radius: 4px; border: 1px solid #ccc; background: #eee; cursor: pointer;">-</button>
@@ -258,6 +261,7 @@ function updateCart() {
                     <button onclick="updateItemQty('${item.line_key}', 1)" style="width: 24px; height: 24px; border-radius: 4px; border: 1px solid #ccc; background: #eee; cursor: pointer;">+</button>
                 </div>
             </td>
+            <td style="text-align: right;">$${item.unit_price.toFixed(2)}</td>
             <td>$${lineTotal.toFixed(2)}</td>
             <td><button onclick="removeFromCart('${item.line_key}')" style="background:none; border:none; color: red; cursor:pointer;">&times;</button></td>
         </tr>
@@ -416,7 +420,13 @@ async function confirmCheckout() {
                     total: cart.reduce((acc, item) => acc + (item.unit_price * item.quantity), 0),
                     paid: amountPaid,
                     debt: account,
-                    client: allClients.find(c => c.id == clientId)
+                    client: allClients.find(c => c.id == clientId),
+                    items: cart.map(item => ({
+                        product_name: item.product_name,
+                        item_number: item.item_number,
+                        quantity: item.quantity,
+                        unit_price: item.unit_price
+                    }))
                 };
             }
 
@@ -472,13 +482,22 @@ function shareWhatsApp() {
         return Swal.fire('Error', 'El cliente no tiene un numero de WhatsApp registrado', 'error');
     }
     
-    let phone = client.phone.replace(/\\D/g, '');
+    let phone = client.phone.replace(/\D/g, '');
     if (!phone.startsWith('54')) phone = '54' + phone;
     
-    const message = `Hola ${client.name}! Te comparto el detalle de tu compra:\\n\\n` +
-        `Total: $${sale.total.toFixed(2)}\\n` +
-        `Pagado: $${sale.paid.toFixed(2)}\\n` +
-        `Saldo a cuenta: $${sale.debt.toFixed(2)}\\n\\n` +
+    const itemsText = (sale.items || []).map((it) => {
+        const code = it.item_number || '-';
+        const qty = Number(it.quantity || 0);
+        const price = Number(it.unit_price || 0);
+        const lineTotal = qty * price;
+        return `• [${code}] ${it.product_name} | Cant: ${qty} | Precio: $${price.toFixed(2)} | Total: $${lineTotal.toFixed(2)}`;
+    }).join('\n');
+
+    const message = `Hola ${client.name}! Te comparto el detalle de tu compra:\n\n` +
+        `${itemsText ? itemsText + '\n\n' : ''}` +
+        `Total: $${sale.total.toFixed(2)}\n` +
+        `Pagado: $${sale.paid.toFixed(2)}\n` +
+        `Saldo a cuenta: $${sale.debt.toFixed(2)}\n\n` +
         `Muchas gracias!`;
         
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;

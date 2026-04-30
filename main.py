@@ -611,7 +611,8 @@ def get_profitability_report(
     end_date: Optional[str] = None,
     user: User = Depends(require_auth), 
     tenant_id: int = Depends(get_tenant), 
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
 ):
     # Default range: current month
     if not start_date:
@@ -659,7 +660,7 @@ def get_profitability_report(
         "start_date": start_date,
         "end_date": end_date,
         "user": user,
-        "settings": Depends(get_settings)
+        "settings": settings
     })
 
 @app.get("/reports/cash-flow", response_class=HTMLResponse)
@@ -755,7 +756,7 @@ def get_cash_flow_report(
         "total_out": total_out,
         "balance": balance,
         "user": user,
-        "settings": Depends(get_settings)
+        "settings": settings
     })
 
 @app.get("/clients/{client_id}/account-statement", response_class=HTMLResponse)
@@ -764,7 +765,8 @@ def get_client_statement_print(
     client_id: int, 
     user: User = Depends(require_auth), 
     tenant_id: int = Depends(get_tenant), 
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
 ):
     from database.models import Client, Sale, Payment, PaymentAllocation
     client = session.exec(select(Client).where(Client.id == client_id, Client.tenant_id == tenant_id)).first()
@@ -800,7 +802,7 @@ def get_client_statement_print(
         "total_debt": total_debt,
         "total_paid": total_paid,
         "balance": total_debt - total_paid,
-        "settings": Depends(get_settings)
+        "settings": settings
     })
 
 @app.post("/api/products/import")
