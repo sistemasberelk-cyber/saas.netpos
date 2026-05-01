@@ -27,6 +27,16 @@
             <div style="font-size: 1.8em; font-weight: bold; color: #10b981;">${{ total_in | round(2) }}</div>
         </div>
         <div class="dashboard-total-card"
+            style="padding: 16px; border-radius: 12px; border: 1px solid #14b8a6; background: rgba(20, 184, 166, 0.08);">
+            <div style="color: #6b7280; font-size: 0.9em; text-transform: uppercase;">Ingresos Efectivo</div>
+            <div style="font-size: 1.8em; font-weight: bold; color: #0f766e;">${{ total_in_cash | round(2) }}</div>
+        </div>
+        <div class="dashboard-total-card"
+            style="padding: 16px; border-radius: 12px; border: 1px solid #3b82f6; background: rgba(59, 130, 246, 0.08);">
+            <div style="color: #6b7280; font-size: 0.9em; text-transform: uppercase;">Ingresos Transferencia</div>
+            <div style="font-size: 1.8em; font-weight: bold; color: #1d4ed8;">${{ total_in_transfer | round(2) }}</div>
+        </div>
+        <div class="dashboard-total-card"
             style="padding: 16px; border-radius: 12px; border: 1px solid #ef4444; background: rgba(239, 68, 68, 0.05);">
             <div style="color: #6b7280; font-size: 0.9em; text-transform: uppercase;">Total Egresos</div>
             <div style="font-size: 1.8em; font-weight: bold; color: #ef4444;">${{ total_out | round(2) }}</div>

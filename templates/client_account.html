@@ -46,7 +46,7 @@
                 <!-- We will mix sales and payments in backend and pass as single list 'movements' -->
                 {% for mov in movements %}
                 <tr>
-                    <td>{{ mov.date.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>{% if mov.date %}{{ mov.date.strftime('%Y-%m-%d %H:%M') }}{% else %}-{% endif %}</td>
                     <td>{{ mov.invoice }}</td>
                     <td>{{ mov.description }}</td>
  

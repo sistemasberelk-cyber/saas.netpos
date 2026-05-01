@@ -291,7 +291,10 @@ def get_client_account(id: int, request: Request, user: User = Depends(require_a
         allocated = session.exec(
             select(func.sum(PaymentAllocation.amount_applied)).where(PaymentAllocation.sale_id == s.id)
         ).one() or 0.0
-        sale_pending_map[s.id] = float((s.total_amount or 0.0) - allocated)
+        # Fallback for legacy rows without allocations: use paid amount split at sale level.
+        if allocated <= 0 and (s.amount_paid or 0.0) > 0:
+            allocated = s.amount_paid or 0.0
+        sale_pending_map[s.id] = max(float((s.total_amount or 0.0) - allocated), 0.0)
 
     movements = []
     for s in sales:
@@ -313,8 +316,15 @@ def get_client_account(id: int, request: Request, user: User = Depends(require_a
             "type": "payment"
         })
         
-    # Sort by date descending
-    movements.sort(key=lambda x: x["date"], reverse=True)
+    # Sort by date descending (defensive against null / naive-aware mix).
+    def _sort_date(dt_value):
+        if dt_value is None:
+            return datetime.min.replace(tzinfo=timezone.utc)
+        if getattr(dt_value, "tzinfo", None) is None:
+            return dt_value.replace(tzinfo=timezone.utc)
+        return dt_value
+
+    movements.sort(key=lambda x: _sort_date(x.get("date")), reverse=True)
     
     return templates.TemplateResponse("client_account.html", {
         "request": request, 
@@ -1355,6 +1365,8 @@ def get_cash_book(
             "user": user,
             "movements": movements,
             "total_in": total_in,
+            "total_in_cash": total_in_cash,
+            "total_in_transfer": total_in_transfer,
             "total_out": abs(total_out),
             "balance": balance,
             "selected_date": target_date.isoformat(),
