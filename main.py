@@ -281,8 +281,8 @@ def get_client_account(id: int, request: Request, user: User = Depends(require_a
     payments_list = session.exec(select(Payment).where(Payment.client_id == id, Payment.tenant_id == tenant_id)).all()
     
     # 3. Calculate Balance & Mix Movements
-    total_debt = sum(s.total_amount for s in sales)
-    total_paid = sum(p.amount for p in payments_list)
+    total_debt = sum((s.total_amount or 0.0) for s in sales)
+    total_paid = sum((p.amount or 0.0) for p in payments_list)
     balance = float(total_debt - total_paid)
     
     from database.models import PaymentAllocation
