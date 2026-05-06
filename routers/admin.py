@@ -12,6 +12,7 @@ from sqlalchemy import case
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.encoders import jsonable_encoder
 from sqlmodel import Session, delete, select
 
 from database.models import Client, Product, Sale, Settings, User, Tenant, SaleItem, CashMovement, Supplier, Payment, Purchase, AICredential
@@ -48,11 +49,11 @@ def _templates():
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request, user: User = Depends(require_auth), settings: Settings = Depends(get_settings)):
     SettingsService.ensure_admin(user)
-    # Safe serialization regardless of Pydantic version
-    try:
-        settings_json = settings.model_dump_json()
-    except AttributeError:
-        settings_json = settings.json()
+    
+    # Safely serialize the Settings object avoiding Pydantic/SQLModel version issues
+    # and preventing recursive relationship serialization
+    settings_dict = jsonable_encoder(settings)
+    settings_json = json.dumps(settings_dict)
     
     return _templates().TemplateResponse(
         "settings.html", 
