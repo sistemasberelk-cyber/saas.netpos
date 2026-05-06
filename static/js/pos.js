@@ -43,6 +43,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     renderProducts(allProducts.slice(0, 30));
+    loadCartState();
+
+    // Attach checkout button listener
+    const checkoutBtn = document.getElementById('btn-checkout');
+    if (checkoutBtn) {
+        checkoutBtn.addEventListener('click', openCheckoutModal);
+    }
+
+    // Attach split-pay input listeners
+    document.querySelectorAll('.split-pay').forEach(inp => inp.addEventListener('input', calcSplit));
 
     document.getElementById('product-search').addEventListener('input', (e) => {
         const term = e.target.value.toLowerCase();
@@ -321,13 +331,6 @@ function openCheckoutModal() {
 window.checkout = openCheckoutModal;
 window.openCheckoutModal = openCheckoutModal;
 
-document.addEventListener('DOMContentLoaded', () => {
-    const checkoutBtn = document.getElementById('btn-checkout');
-    if (checkoutBtn) {
-        checkoutBtn.addEventListener('click', openCheckoutModal);
-    }
-});
-
 function calculateRemaining() {
     const totalText = document.getElementById('modal-total-display').innerText.replace('$', '');
     const total = parseFloat(totalText) || 0;
@@ -366,11 +369,6 @@ function calcSplit() {
     if (rem < 0) rem = 0;
     document.getElementById('pay-account').value = rem.toFixed(2);
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    // Other listener already there, but we can safely attach here for the new split-pay inputs
-    document.querySelectorAll('.split-pay').forEach(inp => inp.addEventListener('input', calcSplit));
-});
 
 function closePaymentModal() {
     document.getElementById('payment-modal').style.display = 'none';
@@ -463,6 +461,7 @@ async function confirmCheckout() {
 
 function resetAfterSale() {
     cart = [];
+    localStorage.removeItem('pos_cart_state');
     updateCart();
     fetch('/api/products').then(res => res.json()).then(data => {
         allProducts = data;
