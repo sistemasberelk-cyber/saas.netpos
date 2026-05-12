@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Optional
 import pandas as pd
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session, func, select
 from database.models import Client, Payment, Sale, Settings, User

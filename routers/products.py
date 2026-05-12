@@ -7,7 +7,7 @@ import pandas as pd
 import barcode
 from barcode import Code128
 from barcode.writer import ImageWriter
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select, col
