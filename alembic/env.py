@@ -17,9 +17,10 @@ if config.config_file_name is not None:
 target_metadata = SQLModel.metadata
 
 # Override sqlalchemy.url with environment variable if present
-db_url = os.getenv("DATABASE_URL")
+db_url = os.getenv("DATABASE_URL", "").strip()
 if db_url:
-    # Handle sqlite:// relative paths if needed, though usually it's absolute in env
+    # Escape '%' for ConfigParser interpolation
+    db_url = db_url.replace('%', '%%')
     config.set_main_option("sqlalchemy.url", db_url)
 
 # other values from the config, defined by the needs of env.py,
