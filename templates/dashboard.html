@@ -4,20 +4,21 @@
 
 {% block content %}
 <!-- Stats Grid -->
-<div class="grid-dashboard">
-    <div class="glass-card">
-        <div class="stat-title">Ventas de Hoy</div>
-        <div class="stat-value">${{ "%.2f"|format(today_sales_total) }}</div>
+<div class="grid-dashboard animate-fade-in">
+    <div class="glass-card stat-card">
+        <div class="stat-label">Ventas de Hoy</div>
+        <div class="stat-value" style="color: var(--accent-color);">${{ "%.2f"|format(today_sales_total) }}</div>
     </div>
-    <div class="glass-card">
-        <div class="stat-title">Productos en Stock</div>
+    <div class="glass-card stat-card">
+        <div class="stat-label">Productos en Stock</div>
         <div class="stat-value">{{ total_products | default(0) }}</div>
     </div>
-    <div class="glass-card">
-        <div class="stat-title">Alertas de Stock</div>
-        <div class="stat-value" style="color: #ef4444;">{{ low_stock | default(0) }}</div>
+    <div class="glass-card stat-card" style="border-left: 4px solid var(--danger-color);">
+        <div class="stat-label">Alertas de Stock</div>
+        <div class="stat-value" style="color: var(--danger-color);">{{ low_stock | default(0) }}</div>
     </div>
 </div>
+
 
 <!-- Ingest Data Section -->
 <div class="glass-card" style="margin-bottom: 24px;">

@@ -50,35 +50,72 @@ def get_client_account(id: int, request: Request, user: User = Depends(require_a
     client = session.get(Client, id)
     if not client or client.tenant_id != tenant_id:
         raise HTTPException(404, "Client not found")
+
     sales = session.exec(select(Sale).where(Sale.client_id == id, Sale.tenant_id == tenant_id)).all()
     payments_list = session.exec(select(Payment).where(Payment.client_id == id, Payment.tenant_id == tenant_id)).all()
+
     total_debt = sum((s.total_amount or 0.0) for s in sales)
     total_paid = sum((p.amount or 0.0) for p in payments_list)
     balance = float(total_debt - total_paid)
+
     movements = []
+
     def _sort_date(dt_value):
         if dt_value is None: return datetime.min.replace(tzinfo=timezone.utc)
-        if isinstance(dt_value, date) and not isinstance(dt_value, datetime): dt_value = datetime.combine(dt_value, datetime.min.time())
-        if getattr(dt_value, "tzinfo", None) is None: return dt_value.replace(tzinfo=timezone.utc)
+        if isinstance(dt_value, date) and not isinstance(dt_value, datetime):
+            dt_value = datetime.combine(dt_value, datetime.min.time())
+        if getattr(dt_value, "tzinfo", None) is None:
+            return dt_value.replace(tzinfo=timezone.utc)
         return dt_value
+
+    # Process Sales as groups
     for s in sales:
-        for item in s.items:
-            movements.append({"date": s.timestamp, "type": "Mercaderia", "quantity": item.quantity, "description": item.product_name, "price": item.unit_price, "debit": item.total, "credit": 0.0})
-        if (s.amount_cash or 0.0) > 0:
-            movements.append({"date": s.timestamp, "type": "Efectivo", "quantity": 0, "description": f"Pago efectivo s/Venta #{s.id}", "price": 0.0, "debit": 0.0, "credit": s.amount_cash})
-        if (s.amount_transfer or 0.0) > 0:
-            movements.append({"date": s.timestamp, "type": "Transf", "quantity": 0, "description": f"Pago transf s/Venta #{s.id}", "price": 0.0, "debit": 0.0, "credit": s.amount_transfer})
-        if (s.amount_cash or 0.0) == 0 and (s.amount_transfer or 0.0) == 0 and (s.amount_paid or 0.0) > 0:
-            movements.append({"date": s.timestamp, "type": s.payment_method.title() if s.payment_method else "Pago", "quantity": 0, "description": f"Pago s/Venta #{s.id}", "price": 0.0, "debit": 0.0, "credit": s.amount_paid})
+        invoice_num = f"FAC-{s.id}"
+        # One main row for the sale
+        items_desc = ", ".join([f"{it.product_name} (x{it.quantity})" for it in s.items[:3]])
+        if len(s.items) > 3: items_desc += "..."
+        
+        pending_invoice = (s.total_amount or 0.0) - (s.amount_paid or 0.0)
+        
+        movements.append({
+            "date": s.timestamp,
+            "invoice": invoice_num,
+            "type": "Venta",
+            "description": items_desc,
+            "debit": s.total_amount,
+            "credit": s.amount_paid,
+            "pending": pending_invoice
+        })
+
+    # Process direct payments
     for p in payments_list:
-        movements.append({"date": p.date, "type": "Abono", "quantity": 0, "description": p.note or "Abono a cuenta corriente", "price": 0.0, "debit": 0.0, "credit": p.amount})
+        movements.append({
+            "date": p.date,
+            "invoice": "-",
+            "type": "Abono",
+            "description": p.note or "Abono a cuenta corriente",
+            "debit": 0.0,
+            "credit": p.amount,
+            "pending": None
+        })
+
     movements.sort(key=lambda x: _sort_date(x.get("date")))
+
     current_balance = 0.0
     for m in movements:
         current_balance += m["debit"] or 0.0
         current_balance -= m["credit"] or 0.0
         m["running_balance"] = current_balance
-    return _templates().TemplateResponse("client_account.html", {"request": request, "active_page": "clients", "settings": settings, "user": user, "client": client, "balance": round(balance, 2), "movements": movements})
+
+    return _templates().TemplateResponse("client_account.html", {
+        "request": request,
+        "active_page": "clients",
+        "settings": settings,
+        "user": user,
+        "client": client,
+        "balance": round(balance, 2),
+        "movements": movements
+    })
 
 @router.post("/api/clients/{id}/pay")
 def register_payment(id: int, amount: float = Form(...), note: Optional[str] = Form(None), session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):

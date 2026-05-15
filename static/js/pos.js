@@ -145,24 +145,23 @@ function renderProducts(products) {
         const displayPrice = hasBulk ? p.price_bulk : p.price;
 
         return `
-        <div style="cursor: pointer; padding: 12px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; text-align: center; background: rgba(255,255,255,0.4); position: relative;">
-            <button onclick="event.stopPropagation(); quickEditProduct(${p.id})"
-                style="position: absolute; top: 4px; right: 4px; background: #2563eb; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 0.75rem; z-index: 10;">
+        <div class="product-card" onclick='addToCart(${JSON.stringify(p)})'>
+            <button onclick="event.stopPropagation(); quickEditProduct(${p.id})" class="btn-secondary"
+                style="position: absolute; top: 8px; right: 8px; padding: 4px 8px; font-size: 0.7rem; border-radius: var(--radius-sm);">
                 Editar
             </button>
-            <div onclick='addToCart(${JSON.stringify(p)})'>
-                <div style="font-weight: 600;">${p.name}</div>
-                ${p.item_number ? `<div style="font-size: 0.8rem; color: #555; background: #eee; display: inline-block; padding: 2px 6px; border-radius: 4px; margin: 4px 0;">#${p.item_number}</div>` : ''}
-                <div style="color: var(--primary-color); font-weight: 700;">
-                    $${displayPrice}
-                    ${hasBulk ? '<span style="font-size: 0.7rem; color: #b45309; display: block;">Precio bulto</span>' : ''}
-                </div>
-                <div style="font-size: 0.8rem; color: #666;">Stock: ${p.stock_quantity}</div>
+            <div style="font-weight: 700; font-size: 1rem; color: var(--text-main);">${p.name}</div>
+            ${p.item_number ? `<div class="item-num">#${p.item_number}</div>` : ''}
+            <div class="price">
+                $${displayPrice}
+                ${hasBulk ? '<div class="bulk-tag">Precio bulto</div>' : ''}
             </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Stock: ${p.stock_quantity}</div>
         </div>
         `;
     }).join('');
 }
+
 
 async function addToCart(product) {
     const prices = [
@@ -249,31 +248,34 @@ function updateCart() {
     const tbody = document.getElementById('cart-body');
     let total = 0;
 
+    if (cart.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 60px; color: var(--text-muted);"><div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.2;">🛒</div>El carrito está vacío</td></tr>`;
+        document.getElementById('cart-total').innerText = '$0.00';
+        return;
+    }
+
     tbody.innerHTML = cart.map(item => {
         const lineTotal = item.unit_price * item.quantity;
         total += lineTotal;
         return `
         <tr>
             <td>
-                ${item.product_name}
-                <div style="font-size: 0.75rem; color: #666;">
+                <div style="font-weight: 700;">${item.product_name}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">
                     ${item.item_number ? `#${item.item_number} | ` : ''}
-                    <span style="color: #2563eb; font-weight: bold;">${item.price_type}</span>
+                    <span style="color: var(--accent-color); font-weight: 700;">${item.price_type}</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; margin-top: 8px;">
+                    <button onclick="updateItemQty('${item.line_key}', -1)" class="btn-secondary" style="width: 28px; height: 28px; border-radius: 6px; padding: 0;">-</button>
+                    <span style="font-weight: 800;">${item.quantity}</span>
+                    <button onclick="updateItemQty('${item.line_key}', 1)" class="btn-secondary" style="width: 28px; height: 28px; border-radius: 6px; padding: 0;">+</button>
                 </div>
             </td>
-            <td style="text-align: center; color: #334155; font-family: monospace;">
-                ${item.item_number || '-'}
+            <td style="text-align: right; font-weight: 600;">$${item.unit_price.toFixed(2)}</td>
+            <td style="text-align: right; font-weight: 800; color: var(--primary-color);">$${lineTotal.toFixed(2)}</td>
+            <td style="width: 40px; text-align: right;">
+                <button onclick="removeFromCart('${item.line_key}')" style="background:none; border:none; color: var(--danger-color); cursor:pointer; font-size: 1.25rem;">&times;</button>
             </td>
-            <td>
-                <div style="display: flex; align-items: center; gap: 4px;">
-                    <button onclick="updateItemQty('${item.line_key}', -1)" style="width: 24px; height: 24px; border-radius: 4px; border: 1px solid #ccc; background: #eee; cursor: pointer;">-</button>
-                    <span style="min-width: 20px; text-align: center;">${item.quantity}</span>
-                    <button onclick="updateItemQty('${item.line_key}', 1)" style="width: 24px; height: 24px; border-radius: 4px; border: 1px solid #ccc; background: #eee; cursor: pointer;">+</button>
-                </div>
-            </td>
-            <td style="text-align: right;">$${item.unit_price.toFixed(2)}</td>
-            <td>$${lineTotal.toFixed(2)}</td>
-            <td><button onclick="removeFromCart('${item.line_key}')" style="background:none; border:none; color: red; cursor:pointer;">&times;</button></td>
         </tr>
         `;
     }).join('');
@@ -281,6 +283,7 @@ function updateCart() {
     document.getElementById('cart-total').innerText = '$' + total.toFixed(2);
     saveCartState();
 }
+
 
 function updateItemQty(lineKey, delta) {
     const item = cart.find(i => i.line_key === lineKey);
@@ -390,11 +393,16 @@ async function confirmCheckout() {
     else if (account > 0 && amountPaid === 0) paymentMethod = 'account';
 
     const salesData = {
-        items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
+        items: cart.map(i => ({ 
+            product_id: i.product_id, 
+            quantity: i.quantity,
+            price_type: i.price_key // unit, retail, or bulk
+        })),
         client_id: clientId ? parseInt(clientId, 10) : null,
         amount_paid: amountPaid,
         payment_method: paymentMethod
     };
+
 
     const btn = document.querySelector('#payment-modal .btn:not([onclick*="close"])');
     const originalText = btn.innerText;

@@ -46,13 +46,18 @@ class StockService:
             if product.stock_quantity < qty:
                 raise ValueError(f"Insufficient stock for {product.name}")
             
-            # --- Credit Limit Check ---
-            # If sale is not fully paid (Current Account), check limit
-            # Determine Price: Use bulk price only when qty meets cant_bulto threshold
-            if product.price_bulk and product.price_bulk > 0 and product.cant_bulto and qty >= product.cant_bulto:
+            # Determine Price: Explicitly honor price_type if sent from POS
+            price_type = item.get("price_type")
+            if price_type == "bulk" and product.price_bulk and product.price_bulk > 0:
+                unit_price = product.price_bulk
+            elif price_type == "retail" and product.price_retail and product.price_retail > 0:
+                unit_price = product.price_retail
+            elif product.price_bulk and product.price_bulk > 0 and product.cant_bulto and qty >= product.cant_bulto:
+                # Fallback to automatic logic if no type or type is "unit" but quantity meets bulk threshold
                 unit_price = product.price_bulk
             else:
                 unit_price = product.price
+
 
             # Decrement Stock
             product.stock_quantity -= qty

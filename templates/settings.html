@@ -3,62 +3,42 @@
 {% block title %}Configuración - NexPos (v2.5){% endblock %}
 
 {% block content %}
-<div class="glass-card">
-    <div style="background: #fee2e2; border: 1px solid #ef4444; padding: 12px; margin-bottom: 16px; border-radius: 8px; color: #b91c1c;">
-        <strong>MODO EDICIÓN ACTIVO:</strong> Si ves esto, los cambios se están aplicando.
-    </div>
+<div class="glass-card animate-fade-in">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-        <h2>Configuración</h2>
-        <span class="badge admin">v2.5</span>
+        <h2>Configuración del Sistema</h2>
+        <span class="badge badge-success">v2.6 Stable</span>
     </div>
 
     <!-- Tabs -->
-    <div style="display: flex; border-bottom: 2px solid rgba(0,0,0,0.1); margin-bottom: 24px;">
-        <button onclick="switchTab('general')" id="tab-general" class="tab-btn active"
-            style="padding: 12px 24px; font-weight: 500; border-bottom: 2px solid var(--primary-color); color: var(--primary-color); background: none; cursor: pointer;">
-            Sistema
-        </button>
-        <button onclick="switchTab('users')" id="tab-users" class="tab-btn"
-            style="padding: 12px 24px; font-weight: 500; border-bottom: 2px solid transparent; color: #666; background: none; cursor: pointer;">
-            Usuarios
-        </button>
-        <button onclick="switchTab('import')" id="tab-import" class="tab-btn"
-            style="padding: 12px 24px; font-weight: 500; border-bottom: 2px solid transparent; color: #666; background: none; cursor: pointer;">
-            Importación Masiva
-        </button>
-        <button onclick="switchTab('taxes')" id="tab-taxes" class="tab-btn"
-            style="padding: 12px 24px; font-weight: 500; border-bottom: 2px solid transparent; color: #666; background: none; cursor: pointer;">
-            Impuestos (IVA/IIBB)
-        </button>
-        <button onclick="switchTab('backup')" id="tab-backup" class="tab-btn"
-            style="padding: 12px 24px; font-weight: 500; border-bottom: 2px solid transparent; color: #666; background: none; cursor: pointer;">
-            Respaldo
-        </button>
-        <button onclick="switchTab('security')" id="tab-security" class="tab-btn"
-            style="padding: 12px 24px; font-weight: 500; border-bottom: 2px solid transparent; color: #666; background: none; cursor: pointer;">
-            Seguridad
-        </button>
-        <button onclick="switchTab('ai')" id="tab-ai" class="tab-btn"
-            style="padding: 12px 24px; font-weight: 500; border-bottom: 2px solid transparent; color: #666; background: none; cursor: pointer;">
-            IA
-        </button>
+    <div class="nav-links" style="margin-bottom: 32px; display: inline-flex;">
+        <button onclick="switchTab('general')" id="tab-general" class="tab-btn active btn-secondary">Sistema</button>
+        <button onclick="switchTab('users')" id="tab-users" class="tab-btn btn-secondary">Usuarios</button>
+        <button onclick="switchTab('import')" id="tab-import" class="tab-btn btn-secondary">Importación</button>
+        <button onclick="switchTab('taxes')" id="tab-taxes" class="tab-btn btn-secondary">Impuestos</button>
+        <button onclick="switchTab('backup')" id="tab-backup" class="tab-btn btn-secondary">Respaldo</button>
+        <button onclick="switchTab('security')" id="tab-security" class="tab-btn btn-secondary">Seguridad</button>
+        <button onclick="switchTab('ai')" id="tab-ai" class="tab-btn btn-secondary">IA</button>
     </div>
 
     <!-- GENERAL SETTINGS -->
     <div id="content-general" class="tab-content">
-        <h3 style="margin-bottom: 16px;">Configuración General</h3>
-        <form onsubmit="updateSettings(event)" style="max-width: 500px;">
-            <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nombre de la Empresa</label>
-            <input type="text" id="s-company" name="company_name" required value="" class="form-input">
-
-            <div style="margin-top: 16px; padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--primary-color);">Estética del Sistema (Look & Feel)</label>
-                <select id="s-theme" name="ui_theme" class="form-input" style="margin-bottom: 0;">
-                    <option value="standard">Standard (Corporativo)</option>
-                    <option value="minimalist">Minimalista (Limpio & Moderno)</option>
-                </select>
-                <small style="color: #64748b;">Cambia la apariencia visual de toda la plataforma.</small>
+        <h3 style="margin-bottom: 20px;">Personalización y General</h3>
+        <form onsubmit="updateSettings(event)" style="max-width: 600px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <label>Nombre de la Empresa</label>
+                    <input type="text" id="s-company" name="company_name" required value="" class="form-input">
+                </div>
+                <div>
+                    <label>Tema Visual (Look & Feel)</label>
+                    <select id="s-theme" name="ui_theme" class="form-input">
+                        <option value="standard">Standard (Corporativo)</option>
+                        <option value="midnight">Midnight Glass (Premium Dark)</option>
+                        <option value="minimalist">Minimalista (Blanco y Negro)</option>
+                    </select>
+                </div>
             </div>
+
 
             <label style="display: block; margin-bottom: 8px; margin-top: 16px; font-weight: 500;">Impresora Predeterminada (Windows)</label>
             <input type="text" id="s-printer" name="printer_name" placeholder="Ej. EPSON TM-T20II" class="form-input">

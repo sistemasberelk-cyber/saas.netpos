@@ -49,21 +49,19 @@
                     <td style="color: #64748b;">
                         {% if mov.date %}{{ mov.date.strftime('%d/%m') }}{% else %}-{% endif %}
                     </td>
-                    <td style="text-align: center;">
-                        {% if mov.quantity > 0 %}{{ mov.quantity }}{% else %}-{% endif %}
-                    </td>
+                    <td>{{ mov.invoice or '-' }}</td>
                     <td>
                         <span style="font-weight: 600; color: #334155;">{{ mov.type }}</span>
                         <div style="font-size: 0.75rem; color: #94a3b8;">{{ mov.description }}</div>
-                    </td>
-                    <td style="text-align: right;">
-                        {% if mov.price > 0 %}${{ mov.price | round(2) }}{% else %}-{% endif %}
                     </td>
                     <td style="text-align: right; color: #ef4444; font-weight: 500;">
                         {% if mov.debit > 0 %}${{ mov.debit | round(2) }}{% else %}-{% endif %}
                     </td>
                     <td style="text-align: right; color: #10b981; font-weight: 500;">
                         {% if mov.credit > 0 %}${{ mov.credit | round(2) }}{% else %}-{% endif %}
+                    </td>
+                    <td style="text-align: right; color: #b45309; font-weight: 600;">
+                        {% if mov.pending is not none %}${{ mov.pending | round(2) }}{% else %}-{% endif %}
                     </td>
                     <td style="text-align: right; font-weight: 700; color: #1e293b; background: #f8fafc;">
                         ${{ mov.running_balance | round(2) }}

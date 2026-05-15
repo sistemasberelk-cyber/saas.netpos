@@ -26,7 +26,7 @@ class Settings(SQLModel, table=True):
     printer_name: Optional[str] = Field(default=None)
     label_width_mm: int = Field(default=60)
     label_height_mm: int = Field(default=40)
-    ui_theme: str = Field(default="standard") # standard, minimalist
+    ui_theme: str = Field(default="default") # default, standard, minimalist
 
 # --- Tax Model ---
 class Tax(SQLModel, table=True):
