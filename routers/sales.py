@@ -36,7 +36,12 @@ def get_sales_page(
     query = select(Sale).where(Sale.tenant_id == tenant_id, Sale.is_closed == False).order_by(Sale.timestamp.desc())
     sales_page = paginate(session, query, page=page, size=size)
     
-    low_stock_products = [p for p in session.exec(select(Product).where(Product.tenant_id == tenant_id, Product.is_deleted == False)).all() if stock_service.get_total_stock(session, p.id, tenant_id) < p.min_stock_level]
+    low_stock_products = []
+    for p in session.exec(select(Product).where(Product.tenant_id == tenant_id, Product.is_deleted == False)).all():
+        stock = stock_service.get_total_stock(session, p.id, tenant_id)
+        if stock < p.min_stock_level:
+            p.stock_quantity = stock
+            low_stock_products.append(p)
     
     return _templates().TemplateResponse("sales.html", {
         "request": request, 
@@ -67,7 +72,12 @@ def trigger_backup(request: Request, user: User = Depends(require_auth), setting
     CashService.perform_cierre(session, tenant_id, user.id)
     
     sales = session.exec(select(Sale).where(Sale.tenant_id == tenant_id, Sale.is_closed == False).order_by(Sale.timestamp.desc())).all()
-    low_stock_products = [p for p in session.exec(select(Product).where(Product.tenant_id == tenant_id, Product.is_deleted == False)).all() if stock_service.get_total_stock(session, p.id, tenant_id) < p.min_stock_level]
+    low_stock_products = []
+    for p in session.exec(select(Product).where(Product.tenant_id == tenant_id, Product.is_deleted == False)).all():
+        stock = stock_service.get_total_stock(session, p.id, tenant_id)
+        if stock < p.min_stock_level:
+            p.stock_quantity = stock
+            low_stock_products.append(p)
     status_msg = "success" if result["status"] == "success" else "error"
     msg_text = "✅ Backup exitoso y caja cerrada!" if result["status"] == "success" else f"❌ Error: {result['message']}"
     return _templates().TemplateResponse("sales.html", {"request": request, "active_page": "sales", "settings": settings, "user": user, "sales": sales, "low_stock_products": low_stock_products, "daily_reports": SaleService.build_daily_reports(session, tenant_id), "backup_status": status_msg, "backup_message": msg_text})

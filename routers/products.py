@@ -42,7 +42,15 @@ def get_products_page(
     query = select(Product).where(Product.tenant_id == tenant_id, Product.is_deleted == False).order_by(Product.name)
     products_page = paginate(session, query, page=page, size=size)
     
-    low_stock_products = [p for p in session.exec(select(Product).where(Product.tenant_id == tenant_id, Product.is_deleted == False)).all() if stock_service.get_total_stock(session, p.id, tenant_id) < p.min_stock_level]
+    low_stock_products = []
+    for p in session.exec(select(Product).where(Product.tenant_id == tenant_id, Product.is_deleted == False)).all():
+        stock = stock_service.get_total_stock(session, p.id, tenant_id)
+        if stock < p.min_stock_level:
+            p.stock_quantity = stock
+            low_stock_products.append(p)
+    
+    for p in products_page.items:
+        p.stock_quantity = stock_service.get_total_stock(session, p.id, tenant_id)
     
     return _templates().TemplateResponse("products.html", {
         "request": request, 
@@ -64,7 +72,13 @@ def get_labels_page(request: Request, user: User = Depends(require_auth), settin
 # ---------- CRUD API ----------
 @router.get("/api/products")
 def get_products_api(session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
-    return session.exec(select(Product).where(Product.tenant_id == tenant_id)).all()
+    products = session.exec(select(Product).where(Product.tenant_id == tenant_id)).all()
+    res = []
+    for p in products:
+        d = p.dict()
+        d["stock_quantity"] = stock_service.get_total_stock(session, p.id, tenant_id)
+        res.append(d)
+    return res
 
 @router.post("/api/products")
 def create_product_api(name: str = Form(...), price: float = Form(...), stock: int = Form(...), description: Optional[str] = Form(None), barcode_val: Optional[str] = Form(None, alias="barcode"), category: Optional[str] = Form(None), item_number: Optional[str] = Form(None), cant_bulto: Optional[int] = Form(None), numeracion: Optional[str] = Form(None), price_bulk: Optional[float] = Form(None), price_retail: Optional[float] = Form(None), image: Optional[UploadFile] = File(None), session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):

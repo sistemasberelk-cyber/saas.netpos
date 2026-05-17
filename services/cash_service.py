@@ -61,13 +61,11 @@ class CashService:
             if last_close_ts and s.timestamp <= last_close_ts: continue
             if s.id in move_sale_ids: continue
             
-            total_in_cash += (s.amount_cash or 0.0)
-            total_in_transfer += (s.amount_transfer or 0.0)
-            if s.amount_cash == 0 and s.amount_transfer == 0 and s.amount_paid > 0:
-                if s.payment_method == "transfer":
-                    total_in_transfer += s.amount_paid
+            for alloc in s.payment_allocations:
+                if alloc.method in ["transfer", "qr"]:
+                    total_in_transfer += alloc.amount
                 else:
-                    total_in_cash += s.amount_paid
+                    total_in_cash += alloc.amount
 
         return {
             "total_in_cash": total_in_cash,

@@ -38,6 +38,8 @@ def ensure_schema_compatibility(session: Session):
     """Hardening: Ensure critical columns exist even if Alembic fails."""
     stmts = [
         "ALTER TABLE bin ADD COLUMN IF NOT EXISTS max_capacity INTEGER",
+        "ALTER TABLE bin ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE bin ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP",
         "ALTER TABLE binstock ADD COLUMN IF NOT EXISTS tenant_id INTEGER",
         "ALTER TABLE binstock ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
         "ALTER TABLE stockmovement ADD COLUMN IF NOT EXISTS tenant_id INTEGER",
@@ -46,20 +48,38 @@ def ensure_schema_compatibility(session: Session):
         "ALTER TABLE cashmovement ADD COLUMN IF NOT EXISTS reference_id INTEGER",
         "ALTER TABLE cashmovement ADD COLUMN IF NOT EXISTS reference_type VARCHAR",
         "ALTER TABLE cashmovement ADD COLUMN IF NOT EXISTS user_id INTEGER",
-        "ALTER TABLE sale ADD COLUMN IF NOT EXISTS amount_cash FLOAT DEFAULT 0.0",
-        "ALTER TABLE sale ADD COLUMN IF NOT EXISTS amount_transfer FLOAT DEFAULT 0.0",
-        "ALTER TABLE sale ADD COLUMN IF NOT EXISTS payment_method VARCHAR DEFAULT 'cash'",
+        "ALTER TABLE cashmovement ADD COLUMN IF NOT EXISTS sale_id INTEGER",
+        "ALTER TABLE cashmovement ADD COLUMN IF NOT EXISTS purchase_id INTEGER",
+        "ALTER TABLE payment ADD COLUMN IF NOT EXISTS receivable_id INTEGER",
+        "ALTER TABLE payment ADD COLUMN IF NOT EXISTS method VARCHAR DEFAULT 'cash'",
+        # "ALTER TABLE sale ADD COLUMN IF NOT EXISTS amount_cash FLOAT DEFAULT 0.0",
+        # "ALTER TABLE sale ADD COLUMN IF NOT EXISTS amount_transfer FLOAT DEFAULT 0.0",
+        # "ALTER TABLE sale ADD COLUMN IF NOT EXISTS payment_method VARCHAR DEFAULT 'cash'",
         "ALTER TABLE product ADD COLUMN IF NOT EXISTS price_bulk FLOAT",
         "ALTER TABLE product ADD COLUMN IF NOT EXISTS price_retail FLOAT",
         "ALTER TABLE product ADD COLUMN IF NOT EXISTS cant_bulto INTEGER",
         "ALTER TABLE product ADD COLUMN IF NOT EXISTS numeracion VARCHAR",
         "ALTER TABLE product ADD COLUMN IF NOT EXISTS curve_quantity INTEGER DEFAULT 1",
+        "ALTER TABLE product ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE product ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP",
+        "ALTER TABLE supplier ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE supplier ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP",
+        "ALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP",
+        "ALTER TABLE purchase ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE purchase ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP",
+        "ALTER TABLE location ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE location ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP",
         "ALTER TABLE client ADD COLUMN IF NOT EXISTS razon_social VARCHAR",
         "ALTER TABLE client ADD COLUMN IF NOT EXISTS cuit VARCHAR",
         "ALTER TABLE client ADD COLUMN IF NOT EXISTS iva_category VARCHAR",
         "ALTER TABLE client ADD COLUMN IF NOT EXISTS transport_name VARCHAR",
         "ALTER TABLE client ADD COLUMN IF NOT EXISTS transport_address VARCHAR",
         "ALTER TABLE settings ADD COLUMN IF NOT EXISTS ui_theme VARCHAR DEFAULT 'default'",
+        "ALTER TABLE aicredential ADD COLUMN IF NOT EXISTS api_key_enc VARCHAR",
+        "ALTER TABLE businessconfig ADD COLUMN IF NOT EXISTS openai_api_key_enc VARCHAR",
+        "ALTER TABLE businessconfig ADD COLUMN IF NOT EXISTS deepseek_api_key_enc VARCHAR",
+        "ALTER TABLE businessconfig ADD COLUMN IF NOT EXISTS elevenlabs_api_key_enc VARCHAR",
     ]
     for stmt in stmts:
         try:
@@ -145,7 +165,14 @@ def get_dashboard(request: Request, user: User = Depends(require_auth), settings
     if user.role == "superadmin":
         return RedirectResponse("/tenants", status_code=302)
     total_products = session.exec(select(func.count(Product.id)).where(Product.tenant_id == tenant_id)).one()
-    low_stock = session.exec(select(func.count(Product.id)).where(Product.tenant_id == tenant_id, Product.stock_quantity < Product.min_stock_level)).one()
+    # To fix crash, calculate low stock in python
+    low_stock = 0
+    from services.stock_service import StockService
+    stock_service = StockService()
+    for p in session.exec(select(Product).where(Product.tenant_id == tenant_id)).all():
+        if stock_service.get_total_stock(session, p.id, tenant_id) < p.min_stock_level:
+            low_stock += 1
+            
     recent_sales = session.exec(select(Sale).where(Sale.tenant_id == tenant_id, Sale.is_closed == False).order_by(Sale.timestamp.desc()).limit(5)).all()
     today_start = datetime.combine(date.today(), datetime.min.time())
     today_sales_total = session.exec(select(func.sum(Sale.total_amount)).where(Sale.tenant_id == tenant_id, Sale.timestamp >= today_start, Sale.is_closed == False)).one() or 0.0

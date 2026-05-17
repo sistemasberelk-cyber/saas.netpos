@@ -103,9 +103,10 @@ class BinStockService:
             )
             session.add(movement)
 
-            # Sincronizar stock global
-            product.stock_quantity = max(0, product.stock_quantity + delta)
-            session.add(product)
+        # session.add(movement)
+        # Sincronizar stock global (eliminado en refactor)
+        # product.stock_quantity = max(0, product.stock_quantity + delta)
+        # session.add(product)
 
         session.commit()
         return {

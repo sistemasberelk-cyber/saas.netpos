@@ -43,7 +43,8 @@ class StockService:
             if not product:
                 raise ValueError(f"Product {p_id} not found or access denied")
             
-            if product.stock_quantity < qty:
+            current_stock = self.get_total_stock(session, product.id, tenant_id)
+            if current_stock < qty:
                 raise ValueError(f"Insufficient stock for {product.name}")
             
             # Determine Price: Explicitly honor price_type if sent from POS
@@ -60,8 +61,7 @@ class StockService:
 
 
             # Decrement Stock
-            product.stock_quantity -= qty
-            session.add(product)
+            self.add_stock(session, p_id, tenant_id, -qty, "venta", "Salida por venta", user_id)
 
             # Create Sale Item (with cost snapshot for profitability)
             line_total = unit_price * qty
@@ -132,8 +132,12 @@ class StockService:
             sale.payment_status = "pending"
             
         sale.amount_paid = final_amount_paid
-        sale.amount_cash = amt_cash
-        sale.amount_transfer = amt_transfer
+        
+        from database.models import PaymentAllocation
+        if amt_cash > 0:
+            sale.payment_allocations.append(PaymentAllocation(method="cash", amount=amt_cash))
+        if amt_transfer > 0:
+            sale.payment_allocations.append(PaymentAllocation(method="transfer", amount=amt_transfer))
         
         session.add(sale)
         session.flush()
@@ -169,5 +173,26 @@ class StockService:
                 ))
 
         session.commit()
-        session.refresh(sale)
         return sale
+
+    def get_total_stock(self, session: Session, product_id: int, tenant_id: int) -> int:
+        from database.models import BinStock
+        from sqlalchemy import func
+        total = session.exec(select(func.sum(BinStock.quantity)).where(BinStock.product_id == product_id, BinStock.tenant_id == tenant_id)).one()
+        return total or 0
+
+    def add_stock(self, session: Session, product_id: int, tenant_id: int, quantity: int, reason: str, notes: str, user_id: int = None):
+        if quantity == 0: return
+        from services.bin_stock_service import BinStockService
+        from database.models import Bin
+        bin_ = session.exec(select(Bin).where(Bin.tenant_id == tenant_id, Bin.name == "SIN-UBICACION")).first()
+        if not bin_:
+            bin_ = session.exec(select(Bin).where(Bin.tenant_id == tenant_id, Bin.is_active == True)).first()
+        if not bin_:
+            raise ValueError("No hay ubicaciones configuradas para descontar stock.")
+        
+        from database.models import BinStock
+        current_bs = session.exec(select(BinStock).where(BinStock.bin_id == bin_.id, BinStock.product_id == product_id)).first()
+        current_qty = current_bs.quantity if current_bs else 0
+        new_qty = current_qty + quantity
+        BinStockService.adjust_stock(session, tenant_id, bin_.id, product_id, new_qty, reason, notes, user_id)
