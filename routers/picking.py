@@ -18,6 +18,9 @@ def _templates():
     from web.compat_templates import CompatTemplates
     return CompatTemplates(directory="templates")
 
+from services.stock_service import StockService
+stock_service = StockService(static_dir="static/barcodes")
+
 
 def _find_product(session: Session, tenant_id: int, search_term: str):
     product = session.exec(select(Product).where(Product.barcode == search_term, Product.tenant_id == tenant_id)).first()
@@ -55,12 +58,9 @@ def picking_entry(
     product = _find_product(session, tenant_id, normalized_barcode)
     if not product:
         raise HTTPException(404, f"Producto no encontrado: {normalized_barcode}")
-    current_stock = product.stock_quantity or 0
-    product.stock_quantity = current_stock + qty
-    session.add(product)
-    session.commit()
-    session.refresh(product)
-    return {"status": "ok", "product": {"name": product.name, "new_stock": product.stock_quantity}}
+    current_stock = stock_service.get_total_stock(session, product.id, tenant_id)
+    stock_service.add_stock(session, product.id, tenant_id, qty, "picking_ingreso", "Picking app", user.id)
+    return {"status": "ok", "product": {"name": product.name, "new_stock": current_stock + qty}}
 
 
 class PickingItem(BaseModel):
@@ -94,7 +94,7 @@ def picking_exit(
         prod = _find_product(session, tenant_id, normalized_barcode)
         if not prod:
             raise HTTPException(404, f"Producto no encontrado: {item.barcode}")
-        current_stock = prod.stock_quantity or 0
+        current_stock = stock_service.get_total_stock(session, prod.id, tenant_id)
         if current_stock < item.qty:
             raise HTTPException(409, f"Stock insuficiente para {prod.name}: disponible {current_stock}, solicitado {item.qty}")
         products_map[normalized_barcode] = prod
@@ -118,9 +118,7 @@ def picking_exit(
                 total=prod.price * item.qty,
             )
         )
-        current_stock = prod.stock_quantity or 0
-        prod.stock_quantity = current_stock - item.qty
-        session.add(prod)
+        stock_service.add_stock(session, prod.id, tenant_id, -item.qty, "venta", f"Picking Sale {new_sale.id}", user.id)
 
     session.commit()
     return {"status": "ok", "sale_id": new_sale.id, "print_url": f"/sales/{new_sale.id}/remito"}

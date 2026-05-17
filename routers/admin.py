@@ -666,7 +666,7 @@ def reset_inventory_from_excel(
                     tenant_id=tenant_id,
                     name=name,
                     price=price,
-                    stock_quantity=get_int(row.get("Stock"), 0),
+                    # stock_quantity=get_int(row.get("Stock"), 0), # No se usa en modelo
                     barcode=barcode,
                     category=None if pd.isna(row.get("Category")) else str(row.get("Category")).strip(),
                     description=None if pd.isna(row.get("Description")) else str(row.get("Description")).strip(),
@@ -774,7 +774,7 @@ def export_products_api(
         "ItemNumber": p.item_number,
         "Barcode": p.barcode,
         "Price": p.price,
-        "Stock": p.stock_quantity,
+        "Stock": sum(bs.quantity for bs in p.stock_entries) if hasattr(p, 'stock_entries') else 0, # Approximation if not using StockService directly
         "Description": p.description,
         "Numeracion": p.numeracion,
         "CantBulto": p.cant_bulto,

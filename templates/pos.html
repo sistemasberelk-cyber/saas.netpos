@@ -6,22 +6,34 @@
 <div class="pos-grid animate-fade-in">
     <!-- Left: Product Selection -->
     <div class="glass-card" style="display: flex; flex-direction: column;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h2>Venta</h2>
-            <div style="display: flex; gap: 8px;">
-                <div style="display: flex; align-items: center; background: var(--surface-alt); border-radius: var(--radius-md); padding: 4px;">
-                    <button onclick="document.getElementById('pos-qty').stepDown()" class="btn-secondary" style="padding: 4px 12px; border: none;">-</button>
-                    <input type="number" id="pos-qty" value="1" min="1" style="width: 50px; text-align: center; border:none; background: transparent; font-weight: 700;">
-                    <button onclick="document.getElementById('pos-qty').stepUp()" class="btn-secondary" style="padding: 4px 12px; border: none;">+</button>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <h2 style="margin:0;">Venta</h2>
+                <!-- Cliente movido arriba -->
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="margin:0; font-size: 14px; font-weight: 600; color: var(--text-secondary);">Cliente:</label>
+                    <select id="client-select" style="padding: 6px 12px; width: 220px; height: 38px; font-size: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--surface-color);">
+                        <option value="">Cliente Casual</option>
+                    </select>
                 </div>
-                <button onclick="startScanner()" class="btn btn-accent">
-                    📷 Escanear
+            </div>
+
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <!-- Buscador más chico -->
+                <input type="text" id="product-search" placeholder="🔍 Buscar..." autofocus style="width: 160px; height: 38px; padding: 6px 12px; font-size: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                
+                <!-- Cantidad -->
+                <div style="display: flex; align-items: center; background: var(--surface-alt); border-radius: var(--radius-md); padding: 2px; height: 38px;">
+                    <button onclick="document.getElementById('pos-qty').stepDown()" class="btn-secondary" style="padding: 0 10px; border: none; height:100%; background:transparent;">-</button>
+                    <input type="number" id="pos-qty" value="1" min="1" style="width: 40px; text-align: center; border:none; background: transparent; font-weight: 700; height:100%; outline:none;">
+                    <button onclick="document.getElementById('pos-qty').stepUp()" class="btn-secondary" style="padding: 0 10px; border: none; height:100%; background:transparent;">+</button>
+                </div>
+
+                <!-- Escáner -->
+                <button onclick="startScanner()" class="btn btn-accent" style="height: 38px; padding: 0 14px; display:flex; align-items:center; gap:6px;">
+                    📷 <span style="font-size: 14px;">Escanear</span>
                 </button>
             </div>
-        </div>
-
-        <div style="margin-bottom: 20px;">
-            <input type="text" id="product-search" placeholder="🔍 Buscar por nombre o código..." autofocus>
         </div>
 
         <div id="product-results" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; overflow-y: auto; flex: 1;">
@@ -31,12 +43,6 @@
 
     <!-- Right: Current Cart -->
     <div class="glass-card cart-container">
-        <div style="margin-bottom: 20px;">
-            <label>Cliente</label>
-            <select id="client-select">
-                <option value="">Cliente Casual</option>
-            </select>
-        </div>
 
         <div class="cart-table">
             <table>

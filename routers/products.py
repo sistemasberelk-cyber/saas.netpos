@@ -42,7 +42,7 @@ def get_products_page(
     query = select(Product).where(Product.tenant_id == tenant_id, Product.is_deleted == False).order_by(Product.name)
     products_page = paginate(session, query, page=page, size=size)
     
-    low_stock_products = session.exec(select(Product).where(Product.tenant_id == tenant_id, Product.is_deleted == False, Product.stock_quantity < Product.min_stock_level)).all()
+    low_stock_products = [p for p in session.exec(select(Product).where(Product.tenant_id == tenant_id, Product.is_deleted == False)).all() if stock_service.get_total_stock(session, p.id, tenant_id) < p.min_stock_level]
     
     return _templates().TemplateResponse("products.html", {
         "request": request, 
@@ -68,7 +68,7 @@ def get_products_api(session: Session = Depends(get_session), user: User = Depen
 
 @router.post("/api/products")
 def create_product_api(name: str = Form(...), price: float = Form(...), stock: int = Form(...), description: Optional[str] = Form(None), barcode_val: Optional[str] = Form(None, alias="barcode"), category: Optional[str] = Form(None), item_number: Optional[str] = Form(None), cant_bulto: Optional[int] = Form(None), numeracion: Optional[str] = Form(None), price_bulk: Optional[float] = Form(None), price_retail: Optional[float] = Form(None), image: Optional[UploadFile] = File(None), session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
-    product = Product(tenant_id=tenant_id, name=name, price=price, stock_quantity=stock, description=description, barcode=barcode_val or "", category=category, item_number=item_number, cant_bulto=cant_bulto, numeracion=numeracion, price_bulk=price_bulk, price_retail=price_retail)
+    product = Product(tenant_id=tenant_id, name=name, price=price, description=description, barcode=barcode_val or "", category=category, item_number=item_number, cant_bulto=cant_bulto, numeracion=numeracion, price_bulk=price_bulk, price_retail=price_retail)
     if image and image.filename:
         ext = image.filename.split(".")[-1]
         filename = f"{uuid.uuid4()}.{ext}"
@@ -83,13 +83,15 @@ def create_product_api(name: str = Form(...), price: float = Form(...), stock: i
         product.barcode = stock_service.generate_barcode(product.id)
         session.add(product)
         session.commit()
+    if stock > 0:
+        stock_service.add_stock(session, product.id, tenant_id, stock, "Ingreso inicial", None, user.id)
     return product
 
 @router.put("/api/products/{id}")
 def update_product_api(id: int, name: str = Form(...), price: float = Form(...), stock: int = Form(...), description: Optional[str] = Form(None), barcode_val: Optional[str] = Form(None, alias="barcode"), category: Optional[str] = Form(None), item_number: Optional[str] = Form(None), cant_bulto: Optional[int] = Form(None), numeracion: Optional[str] = Form(None), price_bulk: Optional[float] = Form(None), price_retail: Optional[float] = Form(None), image: Optional[UploadFile] = File(None), session: Session = Depends(get_session), user: User = Depends(require_auth), tenant_id: int = Depends(get_tenant)):
     product = session.get(Product, id)
     if not product or product.tenant_id != tenant_id: raise HTTPException(404, "Not found")
-    product.name, product.price, product.stock_quantity, product.description = name, price, stock, description
+    product.name, product.price, product.description = name, price, description
     product.category, product.item_number, product.cant_bulto, product.numeracion = category, item_number, cant_bulto, numeracion
     product.price_bulk, product.price_retail = price_bulk, price_retail
     if barcode_val: product.barcode = barcode_val
@@ -159,11 +161,11 @@ async def import_products_excel(file: UploadFile = File(...), session: Session =
         if existing:
             existing.price = float(row.get("precio") or row.get("price") or 0)
             existing.cost_price = float(row.get("costo") or row.get("cost") or 0)
-            existing.stock_quantity = int(row.get("stock") or 0)
+            # existing.stock_quantity no se actualiza directo en WMS
             session.add(existing)
             updated += 1
         else:
-            session.add(Product(tenant_id=tenant_id, name=str(p_name), price=float(row.get("precio") or row.get("price") or 0), cost_price=float(row.get("costo") or row.get("cost") or 0), stock_quantity=int(row.get("stock") or 0), barcode=p_barcode if p_barcode != "nan" else None))
+            session.add(Product(tenant_id=tenant_id, name=str(p_name), price=float(row.get("precio") or row.get("price") or 0), cost_price=float(row.get("costo") or row.get("cost") or 0), barcode=p_barcode if p_barcode != "nan" else None))
             processed += 1
     session.commit()
     return {"status": "success", "created": processed, "updated": updated}

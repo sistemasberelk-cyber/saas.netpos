@@ -522,7 +522,8 @@ def wms_transfers_ui(
     _ensure_wms_schema_compat(session)
     # Productos con stock
     products = session.exec(
-        select(Product).where(Product.tenant_id == tenant_id, Product.stock_quantity > 0).order_by(Product.name)
+        select(Product).join(BinStock, BinStock.product_id == Product.id)
+        .where(Product.tenant_id == tenant_id, BinStock.quantity > 0).distinct().order_by(Product.name)
     ).all()
     
     # Locaciones y sus bins
