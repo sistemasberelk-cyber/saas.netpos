@@ -12,8 +12,6 @@ CORRECCIONES APLICADAS:
   8. CashMovement: sale_id + purchase_id restaurados como referencias tipadas
 """
 
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from typing import List, Optional
 

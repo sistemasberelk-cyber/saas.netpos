@@ -50,11 +50,6 @@ def upgrade() -> None:
     # FIX 3: barcode — eliminar unique global, crear unique por tenant
     # -----------------------------------------------------------------------
     with op.batch_alter_table("product") as batch_op:
-        # Eliminar el índice único global (nombre puede variar según DB)
-        try:
-            batch_op.drop_constraint("uq_product_barcode", type_="unique")
-        except Exception:
-            pass  # SQLite no siempre tiene nombre de constraint explícito
         # Crear unique compuesto por tenant
         batch_op.create_unique_constraint(
             "uq_product_tenant_barcode", ["tenant_id", "barcode"]
