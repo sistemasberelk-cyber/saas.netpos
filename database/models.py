@@ -195,6 +195,22 @@ class Product(SQLModel, table=True):
     is_deleted: bool = Field(default=False)
     deleted_at: Optional[datetime] = Field(default=None)
 
+    @property
+    def stock_quantity(self) -> int:
+        from sqlalchemy.orm import object_session
+        session = object_session(self)
+        if session is not None and self.id is not None:
+            from database.models import BinStock
+            from sqlmodel import select
+            from sqlalchemy import func
+            total = session.exec(select(func.sum(BinStock.quantity)).where(BinStock.product_id == self.id, BinStock.tenant_id == self.tenant_id)).one()
+            return total or 0
+        return 0
+
+    @stock_quantity.setter
+    def stock_quantity(self, value: int):
+        pass
+
 
 # ===========================================================================
 # SALE / SALE ITEM
@@ -224,6 +240,21 @@ class Sale(SQLModel, table=True):
     items: List["SaleItem"] = Relationship(back_populates="sale")
     payment_allocations: List["PaymentAllocation"] = Relationship(back_populates="sale")
     receivable: Optional["AccountReceivable"] = Relationship(back_populates="sale")
+
+    @property
+    def payment_method(self) -> str:
+        if not self.payment_allocations:
+            return "cuenta_corriente"
+        if len(self.payment_allocations) == 1:
+            return self.payment_allocations[0].method
+        methods = {pa.method for pa in self.payment_allocations}
+        if len(methods) == 1:
+            return list(methods)[0]
+        return "combinado"
+
+    @payment_method.setter
+    def payment_method(self, value: str):
+        pass
 
 
 class SaleItem(SQLModel, table=True):

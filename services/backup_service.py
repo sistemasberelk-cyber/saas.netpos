@@ -84,8 +84,10 @@ def perform_backup(session: Session, tenant_id: int):
             sheet_stock = spreadsheet.worksheet("Stock")
         except Exception:
             sheet_stock = spreadsheet.add_worksheet(title="Stock", rows="1000", cols="7")
+        from services.stock_service import StockService
+        stock_service = StockService()
         products = session.exec(select(Product).where(Product.tenant_id == tenant_id)).all()
-        stock_rows = [[tenant_id, p.id, p.item_number, p.name, p.category, p.stock_quantity, p.price] for p in products]
+        stock_rows = [[tenant_id, p.id, p.item_number, p.name, p.category, stock_service.get_total_stock(session, p.id, tenant_id), p.price] for p in products]
         sheet_stock.clear()
         sheet_stock.append_row(["Tenant", "ID", "Articulo", "Producto", "Categoria", "CANTIDAD", "Precio"])
         if stock_rows:

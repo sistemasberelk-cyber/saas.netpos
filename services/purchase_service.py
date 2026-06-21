@@ -57,7 +57,8 @@ class PurchaseService:
             total_amount += item_total
 
             product.cost_price = unit_cost
-            product.stock_quantity += quantity
+            from services.stock_service import StockService
+            StockService().add_stock(session, product.id, tenant_id, quantity, "compra", f"Entrada por compra. Factura: {invoice_number or ''}", user_id)
             session.add(product)
             session.add(
                 PurchaseItem(

@@ -21,9 +21,23 @@ def run_import():
         # Ensure default tenant exists
         AuthService.create_default_user_and_settings(session)
         tenant = session.exec(select(Tenant)).first()
-        if not tenant:
-            print("Error: Could not obtain a default tenant.")
-            sys.exit(1)
+        from database.models import Location, Bin
+        location = session.exec(select(Location).where(Location.tenant_id == tenant.id)).first()
+        if not location:
+            location = Location(tenant_id=tenant.id, name="Stock General", code="GENERAL", description="Creado por importador")
+            session.add(location)
+            session.commit()
+            session.refresh(location)
+            
+        bin_ = session.exec(select(Bin).where(Bin.tenant_id == tenant.id, Bin.name == "SIN-UBICACION")).first()
+        if not bin_:
+            bin_ = Bin(tenant_id=tenant.id, location_id=location.id, name="SIN-UBICACION", is_active=True)
+            session.add(bin_)
+            session.commit()
+            session.refresh(bin_)
+
+        from services.stock_service import StockService
+        stock_service = StockService()
 
         for idx, row in df.iterrows():
             name = str(row.get('Name', ''))
@@ -74,7 +88,6 @@ def run_import():
                 tenant_id=tenant.id,
                 name=name,
                 price=price,
-                stock_quantity=stock,
                 category=category,
                 item_number=item_num,
                 description=desc,
@@ -87,6 +100,10 @@ def run_import():
             session.add(product)
             session.commit()
             session.refresh(product)
+            
+            if stock > 0:
+                stock_service.add_stock(session, product.id, tenant.id, stock, "ingreso", "Importacion inicial")
+                session.commit()
             
             if not product.barcode:
                 product.barcode = generate_barcode_for_id(product.id)
