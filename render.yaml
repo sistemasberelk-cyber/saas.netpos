@@ -23,7 +23,7 @@ services:
     runtime: node
     repo: https://github.com/sistemasberelk-cyber/vibecloud
     plan: free
-    rootDirectory: frontend
+    rootDir: frontend
     buildCommand: npm install && npm run build
     startCommand: npm run start
     envVars:
