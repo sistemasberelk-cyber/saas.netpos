@@ -7,3 +7,251 @@
 2026-06-20 22:51:03,160 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.constraints
 2026-06-20 22:51:03,160 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.defaults
 2026-06-20 22:51:03,160 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.comments
+2026-06-20 23:22:51,470 [INFO] root: Logging system initialized.
+2026-06-20 23:22:52,446 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.schemas
+2026-06-20 23:22:52,447 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.tables
+2026-06-20 23:22:52,447 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.types
+2026-06-20 23:22:52,447 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.constraints
+2026-06-20 23:22:52,447 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.defaults
+2026-06-20 23:22:52,447 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.comments
+2026-06-20 23:24:04,741 [INFO] root: Logging system initialized.
+2026-06-20 23:24:05,744 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.schemas
+2026-06-20 23:24:05,745 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.tables
+2026-06-20 23:24:05,745 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.types
+2026-06-20 23:24:05,745 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.constraints
+2026-06-20 23:24:05,745 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.defaults
+2026-06-20 23:24:05,745 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.comments
+2026-06-20 23:26:09,113 [INFO] root: Logging system initialized.
+2026-06-20 23:26:09,615 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/products "HTTP/1.1 422 Unprocessable Entity"
+2026-06-20 23:26:11,996 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.schemas
+2026-06-20 23:26:11,996 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.tables
+2026-06-20 23:26:11,996 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.types
+2026-06-20 23:26:11,996 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.constraints
+2026-06-20 23:26:11,996 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.defaults
+2026-06-20 23:26:11,996 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.comments
+2026-06-20 23:26:16,401 [ERROR] sqlalchemy.pool.impl.SingletonThreadPool: Exception during reset or similar
+Traceback (most recent call last):
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 986, in _finalize_fairy
+    fairy._reset(
+    ~~~~~~~~~~~~^
+        pool,
+        ^^^^^
+    ...<2 lines>...
+        asyncio_safe=can_manipulate_connection,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 1441, in _reset
+    pool._dialect.do_rollback(self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 712, in do_rollback
+    dbapi_connection.rollback()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 4396 and this is thread id 5624.
+2026-06-20 23:26:16,403 [ERROR] sqlalchemy.pool.impl.SingletonThreadPool: Exception terminating connection <sqlite3.Connection object at 0x0000015A3A256A70>
+Traceback (most recent call last):
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 986, in _finalize_fairy
+    fairy._reset(
+    ~~~~~~~~~~~~^
+        pool,
+        ^^^^^
+    ...<2 lines>...
+        asyncio_safe=can_manipulate_connection,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 1441, in _reset
+    pool._dialect.do_rollback(self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 712, in do_rollback
+    dbapi_connection.rollback()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 4396 and this is thread id 5624.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 373, in _close_connection
+    self._dialect.do_terminate(connection)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 718, in do_terminate
+    self.do_close(dbapi_connection)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 721, in do_close
+    dbapi_connection.close()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 4396 and this is thread id 5624.
+2026-06-20 23:26:16,405 [ERROR] sqlalchemy.pool.impl.SingletonThreadPool: Exception during reset or similar
+Traceback (most recent call last):
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 986, in _finalize_fairy
+    fairy._reset(
+    ~~~~~~~~~~~~^
+        pool,
+        ^^^^^
+    ...<2 lines>...
+        asyncio_safe=can_manipulate_connection,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 1441, in _reset
+    pool._dialect.do_rollback(self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 712, in do_rollback
+    dbapi_connection.rollback()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 6544 and this is thread id 5624.
+2026-06-20 23:26:16,406 [ERROR] sqlalchemy.pool.impl.SingletonThreadPool: Exception terminating connection <sqlite3.Connection object at 0x0000015A3A12C310>
+Traceback (most recent call last):
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 986, in _finalize_fairy
+    fairy._reset(
+    ~~~~~~~~~~~~^
+        pool,
+        ^^^^^
+    ...<2 lines>...
+        asyncio_safe=can_manipulate_connection,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 1441, in _reset
+    pool._dialect.do_rollback(self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 712, in do_rollback
+    dbapi_connection.rollback()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 6544 and this is thread id 5624.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 373, in _close_connection
+    self._dialect.do_terminate(connection)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 718, in do_terminate
+    self.do_close(dbapi_connection)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 721, in do_close
+    dbapi_connection.close()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 6544 and this is thread id 5624.
+2026-06-20 23:26:16,407 [ERROR] sqlalchemy.pool.impl.SingletonThreadPool: Exception during reset or similar
+Traceback (most recent call last):
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 986, in _finalize_fairy
+    fairy._reset(
+    ~~~~~~~~~~~~^
+        pool,
+        ^^^^^
+    ...<2 lines>...
+        asyncio_safe=can_manipulate_connection,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 1441, in _reset
+    pool._dialect.do_rollback(self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 712, in do_rollback
+    dbapi_connection.rollback()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 10356 and this is thread id 5624.
+2026-06-20 23:26:16,408 [ERROR] sqlalchemy.pool.impl.SingletonThreadPool: Exception terminating connection <sqlite3.Connection object at 0x0000015A3A1D44F0>
+Traceback (most recent call last):
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 986, in _finalize_fairy
+    fairy._reset(
+    ~~~~~~~~~~~~^
+        pool,
+        ^^^^^
+    ...<2 lines>...
+        asyncio_safe=can_manipulate_connection,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 1441, in _reset
+    pool._dialect.do_rollback(self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 712, in do_rollback
+    dbapi_connection.rollback()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 10356 and this is thread id 5624.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 373, in _close_connection
+    self._dialect.do_terminate(connection)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 718, in do_terminate
+    self.do_close(dbapi_connection)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 721, in do_close
+    dbapi_connection.close()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 10356 and this is thread id 5624.
+2026-06-20 23:26:16,409 [ERROR] sqlalchemy.pool.impl.SingletonThreadPool: Exception during reset or similar
+Traceback (most recent call last):
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 986, in _finalize_fairy
+    fairy._reset(
+    ~~~~~~~~~~~~^
+        pool,
+        ^^^^^
+    ...<2 lines>...
+        asyncio_safe=can_manipulate_connection,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 1441, in _reset
+    pool._dialect.do_rollback(self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 712, in do_rollback
+    dbapi_connection.rollback()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 22012 and this is thread id 5624.
+2026-06-20 23:26:16,411 [ERROR] sqlalchemy.pool.impl.SingletonThreadPool: Exception terminating connection <sqlite3.Connection object at 0x0000015A3A1D7A60>
+Traceback (most recent call last):
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 986, in _finalize_fairy
+    fairy._reset(
+    ~~~~~~~~~~~~^
+        pool,
+        ^^^^^
+    ...<2 lines>...
+        asyncio_safe=can_manipulate_connection,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 1441, in _reset
+    pool._dialect.do_rollback(self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 712, in do_rollback
+    dbapi_connection.rollback()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 22012 and this is thread id 5624.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\pool\base.py", line 373, in _close_connection
+    self._dialect.do_terminate(connection)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 718, in do_terminate
+    self.do_close(dbapi_connection)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Gabriel\AppData\Roaming\Python\Python314\site-packages\sqlalchemy\engine\default.py", line 721, in do_close
+    dbapi_connection.close()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 22012 and this is thread id 5624.
+2026-06-20 23:47:24,666 [INFO] root: Logging system initialized.
+2026-06-20 23:47:25,038 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/products "HTTP/1.1 422 Unprocessable Entity"
+2026-06-20 23:47:25,134 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/products "HTTP/1.1 200 OK"
+2026-06-20 23:47:25,167 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/products "HTTP/1.1 200 OK"
+2026-06-20 23:47:25,174 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/products/1 "HTTP/1.1 404 Not Found"
+2026-06-20 23:47:25,365 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.schemas
+2026-06-20 23:47:25,366 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.tables
+2026-06-20 23:47:25,366 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.types
+2026-06-20 23:47:25,366 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.constraints
+2026-06-20 23:47:25,366 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.defaults
+2026-06-20 23:47:25,366 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.comments
+2026-06-20 23:47:25,633 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/login "HTTP/1.1 200 OK"
+2026-06-20 23:47:25,671 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/login "HTTP/1.1 401 Unauthorized"
+2026-06-20 23:47:25,949 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/login "HTTP/1.1 200 OK"
+2026-06-20 23:47:25,960 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/refresh "HTTP/1.1 200 OK"
+2026-06-20 23:47:26,203 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/login "HTTP/1.1 200 OK"
+2026-06-20 23:47:26,212 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/logout "HTTP/1.1 200 OK"
+2026-06-20 23:47:26,217 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/refresh "HTTP/1.1 401 Unauthorized"

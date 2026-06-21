@@ -565,3 +565,17 @@ class AICredential(SQLModel, table=True):
 
     # NUNCA guardar la clave original. Guardar encrypt_api_key(plain).
     api_key_enc: str
+
+
+# ===========================================================================
+# REFRESH TOKEN (FASE 1: JWT)
+# ===========================================================================
+
+class RefreshToken(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    tenant_id: int = Field(foreign_key="tenant.id", index=True)
+    token_hash: str = Field(index=True, unique=True)
+    expires_at: datetime
+    created_at: datetime = Field(default_factory=_utcnow)
+    revoked_at: Optional[datetime] = None

@@ -28,6 +28,11 @@ from routers.reports import router as reports_router
 from routers.picking import router as picking_router
 from routers.wms import router as wms_router
 
+# API V1 Routers
+from routers.api.v1.auth import router as auth_v1_router
+from routers.api.v1.products import router as products_v1_router
+from routers.api.v1.sales import router as sales_v1_router
+
 from web.logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -162,6 +167,11 @@ app.include_router(cash_router)
 app.include_router(reports_router)
 app.include_router(picking_router)
 app.include_router(wms_router)
+
+# Register API V1 Routers
+app.include_router(auth_v1_router, prefix="/api/v1", tags=["Auth V1"])
+app.include_router(products_v1_router, prefix="/api/v1", tags=["Products V1"])
+app.include_router(sales_v1_router, prefix="/api/v1", tags=["Sales V1"])
 
 
 @app.get("/health")

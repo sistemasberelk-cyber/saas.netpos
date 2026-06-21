@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 import os
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status, Header
 from sqlmodel import Session, select
 
 from database.models import Tenant, User
@@ -92,3 +92,32 @@ def get_settings(
         host_tenant = _resolve_tenant_from_host(request.headers.get("host"), session)
         tenant_id = host_tenant if host_tenant else None
     return SettingsService.get_or_create_settings(session, tenant_id=tenant_id)
+
+
+def get_current_user_jwt(
+    authorization: str = Header(...),
+    session: Session = Depends(get_session),
+) -> User:
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token scheme",
+        )
+    token = authorization.split(" ")[1]
+    from services.jwt_service import decode_access_token
+    try:
+        payload = decode_access_token(token)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+        )
+    
+    user_id = int(payload.get("sub"))
+    user = session.get(User, user_id)
+    if not user or not user.is_active or user.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
+    return user

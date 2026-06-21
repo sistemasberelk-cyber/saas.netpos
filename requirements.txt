@@ -19,3 +19,4 @@ oauth2client
 alembic
 pytest
 httpx
+pyjwt==2.11.0
