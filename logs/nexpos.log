@@ -316,3 +316,65 @@ sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in
 2026-06-21 08:51:41,989 [INFO] httpx: HTTP Request: PUT http://testserver/api/v1/ui-config/pos "HTTP/1.1 200 OK"
 2026-06-21 08:51:42,026 [INFO] httpx: HTTP Request: PUT http://testserver/api/v1/ui-config/dashboard "HTTP/1.1 200 OK"
 2026-06-21 08:51:42,033 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/ui-config/dashboard "HTTP/1.1 200 OK"
+2026-06-21 09:49:22,082 [INFO] root: Logging system initialized.
+2026-06-21 09:49:22,837 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/products "HTTP/1.1 422 Unprocessable Entity"
+2026-06-21 09:49:22,952 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/products "HTTP/1.1 200 OK"
+2026-06-21 09:49:22,996 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/products "HTTP/1.1 200 OK"
+2026-06-21 09:49:23,002 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/products/1 "HTTP/1.1 404 Not Found"
+2026-06-21 09:49:23,262 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.schemas
+2026-06-21 09:49:23,263 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.tables
+2026-06-21 09:49:23,263 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.types
+2026-06-21 09:49:23,263 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.constraints
+2026-06-21 09:49:23,263 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.defaults
+2026-06-21 09:49:23,263 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.comments
+2026-06-21 09:49:24,029 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/ui/generate "HTTP/1.1 200 OK"
+2026-06-21 09:49:24,606 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/ui/generate "HTTP/1.1 403 Forbidden"
+2026-06-21 09:49:25,143 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/ui/cron/daily-theme?page_name=pos "HTTP/1.1 200 OK"
+2026-06-21 09:49:25,238 [INFO] web.scheduler: Scheduler: Starting daily theme generation run...
+2026-06-21 09:49:25,239 [INFO] web.scheduler: Scheduler: Processing tenant 'Test Tenant' (ID: 1)
+2026-06-21 09:49:25,674 [INFO] web.scheduler: Scheduler: Updated theme for tenant 1 with theme: {'primary_color': '#FFA500', 'secondary_color': '#008000', 'mode': 'light', 'background_gradient': 'linear-gradient(to right, orange, green)', 'border_radius': '15px', 'font_family': 'Outfit'}
+2026-06-21 09:49:25,989 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/login "HTTP/1.1 200 OK"
+2026-06-21 09:49:26,035 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/login "HTTP/1.1 401 Unauthorized"
+2026-06-21 09:49:26,264 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/login "HTTP/1.1 200 OK"
+2026-06-21 09:49:26,281 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/refresh "HTTP/1.1 200 OK"
+2026-06-21 09:49:26,520 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/login "HTTP/1.1 200 OK"
+2026-06-21 09:49:26,534 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/logout "HTTP/1.1 200 OK"
+2026-06-21 09:49:26,543 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/refresh "HTTP/1.1 401 Unauthorized"
+2026-06-21 09:49:26,679 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/ui-config/pos "HTTP/1.1 422 Unprocessable Entity"
+2026-06-21 09:49:26,727 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/ui-config/pos "HTTP/1.1 200 OK"
+2026-06-21 09:49:26,764 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/ui-config/pos "HTTP/1.1 200 OK"
+2026-06-21 09:49:26,831 [INFO] httpx: HTTP Request: PUT http://testserver/api/v1/ui-config/pos "HTTP/1.1 403 Forbidden"
+2026-06-21 09:49:26,842 [INFO] httpx: HTTP Request: PUT http://testserver/api/v1/ui-config/pos "HTTP/1.1 200 OK"
+2026-06-21 09:49:26,880 [INFO] httpx: HTTP Request: PUT http://testserver/api/v1/ui-config/dashboard "HTTP/1.1 200 OK"
+2026-06-21 09:49:26,889 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/ui-config/dashboard "HTTP/1.1 200 OK"
+2026-06-21 09:49:58,961 [INFO] root: Logging system initialized.
+2026-06-21 09:49:59,408 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/products "HTTP/1.1 422 Unprocessable Entity"
+2026-06-21 09:49:59,495 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/products "HTTP/1.1 200 OK"
+2026-06-21 09:49:59,532 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/products "HTTP/1.1 200 OK"
+2026-06-21 09:49:59,539 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/products/1 "HTTP/1.1 404 Not Found"
+2026-06-21 09:49:59,721 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.schemas
+2026-06-21 09:49:59,721 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.tables
+2026-06-21 09:49:59,721 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.types
+2026-06-21 09:49:59,721 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.constraints
+2026-06-21 09:49:59,721 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.defaults
+2026-06-21 09:49:59,721 [INFO] alembic.runtime.plugins: setup plugin alembic.autogenerate.comments
+2026-06-21 09:50:00,316 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/ui/generate "HTTP/1.1 200 OK"
+2026-06-21 09:50:00,353 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/ui/generate "HTTP/1.1 403 Forbidden"
+2026-06-21 09:50:00,903 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/ui/cron/daily-theme?page_name=pos "HTTP/1.1 200 OK"
+2026-06-21 09:50:00,927 [INFO] web.scheduler: Scheduler: Starting daily theme generation run...
+2026-06-21 09:50:00,929 [INFO] web.scheduler: Scheduler: Processing tenant 'Test Tenant' (ID: 1)
+2026-06-21 09:50:01,446 [INFO] web.scheduler: Scheduler: Updated theme for tenant 1 with theme: {'primary_color': '#FFA500', 'secondary_color': '#008000', 'mode': 'light', 'background_gradient': 'linear-gradient(to right, orange, green)', 'border_radius': '15px', 'font_family': 'Outfit'}
+2026-06-21 09:50:01,735 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/login "HTTP/1.1 200 OK"
+2026-06-21 09:50:01,762 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/login "HTTP/1.1 401 Unauthorized"
+2026-06-21 09:50:01,988 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/login "HTTP/1.1 200 OK"
+2026-06-21 09:50:02,000 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/refresh "HTTP/1.1 200 OK"
+2026-06-21 09:50:02,217 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/login "HTTP/1.1 200 OK"
+2026-06-21 09:50:02,225 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/logout "HTTP/1.1 200 OK"
+2026-06-21 09:50:02,232 [INFO] httpx: HTTP Request: POST http://testserver/api/v1/auth/refresh "HTTP/1.1 401 Unauthorized"
+2026-06-21 09:50:02,345 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/ui-config/pos "HTTP/1.1 422 Unprocessable Entity"
+2026-06-21 09:50:02,374 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/ui-config/pos "HTTP/1.1 200 OK"
+2026-06-21 09:50:02,410 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/ui-config/pos "HTTP/1.1 200 OK"
+2026-06-21 09:50:02,443 [INFO] httpx: HTTP Request: PUT http://testserver/api/v1/ui-config/pos "HTTP/1.1 403 Forbidden"
+2026-06-21 09:50:02,454 [INFO] httpx: HTTP Request: PUT http://testserver/api/v1/ui-config/pos "HTTP/1.1 200 OK"
+2026-06-21 09:50:02,499 [INFO] httpx: HTTP Request: PUT http://testserver/api/v1/ui-config/dashboard "HTTP/1.1 200 OK"
+2026-06-21 09:50:02,508 [INFO] httpx: HTTP Request: GET http://testserver/api/v1/ui-config/dashboard "HTTP/1.1 200 OK"

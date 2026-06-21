@@ -137,6 +137,11 @@ async def lifespan(app: FastAPI):
             raise
         if os.getenv("SEED_ON_START") == "1":
             seed_products(session)
+
+    # Start background daily theme scheduler
+    from web.scheduler import start_theme_scheduler
+    start_theme_scheduler()
+
     yield
 
 
