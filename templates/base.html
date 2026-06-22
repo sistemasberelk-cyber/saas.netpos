@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}NexPos Cloud{% endblock %}</title>
+    <title>{% block title %}VibeCloud Cloud{% endblock %}</title>
     <link rel="stylesheet" href="/static/css/style.css?v=5">
     <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#14324a">
@@ -22,7 +22,7 @@
                 <div style="width: 32px; height: 32px; background: var(--accent-color); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white;">NP</div>
                 {% endif %}
                 <div style="display: flex; flex-direction: column; line-height: 1;">
-                    <span>{{ settings.company_name or 'NexPos' }}</span>
+                    <span>{{ settings.company_name or 'VibeCloud' }}</span>
                     <small style="font-size: 0.6rem; opacity: 0.6; letter-spacing: 0.05em; text-transform: uppercase;">Cloud Retail</small>
                 </div>
             </a>
@@ -69,7 +69,7 @@
         </button>
         <div id="ai-panel" class="glass-card animate-fade-in" style="display:none; position: absolute; bottom: 80px; right: 0; width: 360px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; padding: 0; border: 1px solid var(--border-strong);">
             <div style="padding: 16px; background: var(--primary-color); color: white; display:flex; justify-content: space-between; align-items: center;">
-                <div style="font-weight: 700;">NexPos Intelligence</div>
+                <div style="font-weight: 700;">VibeCloud Intelligence</div>
                 <button onclick="toggleAI(false)" style="background:none;border:none;color:white;font-size:20px;cursor:pointer;">&times;</button>
             </div>
             <div id="ai-messages" style="padding: 16px; height: 320px; overflow-y: auto; font-size: 0.9rem; background: var(--surface-alt);"></div>

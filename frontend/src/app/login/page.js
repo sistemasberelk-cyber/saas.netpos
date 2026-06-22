@@ -86,7 +86,7 @@ export default function LoginPage() {
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent'
           }}>
-            NexPos <span style={{ color: 'var(--primary-color)', WebkitTextFillColor: 'initial' }}>SaaS</span>
+            VibeCloud <span style={{ color: 'var(--primary-color)', WebkitTextFillColor: 'initial' }}>SaaS</span>
           </h1>
           <p style={{
             fontSize: '0.85rem',
@@ -189,7 +189,7 @@ export default function LoginPage() {
           opacity: 0.5,
           marginTop: '0.5rem'
         }}>
-          NexPos SaaS &copy; 2026. Todos los derechos reservados.
+          VibeCloud SaaS &copy; 2026. Todos los derechos reservados.
         </div>
       </div>
     </div>

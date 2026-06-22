@@ -89,7 +89,7 @@ class AuthService:
         if not settings:
             default_settings = Settings(
                 tenant_id=tenant.id,
-                company_name="NexPos",
+                company_name="VibeCloud",
                 logo_url="/static/images/logo.png",
             )
             session.add(default_settings)

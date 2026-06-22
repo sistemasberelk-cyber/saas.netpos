@@ -1,6 +1,6 @@
 # Notas de Migración: Auditoría de Seguridad & AuthService
 
-Este documento contiene las observaciones de la auditoría inicial de seguridad realizada en la Fase 0 para preparar el sistema de autenticación de NexPos hacia tokens JWT.
+Este documento contiene las observaciones de la auditoría inicial de seguridad realizada en la Fase 0 para preparar el sistema de autenticación de VibeCloud hacia tokens JWT.
 
 ## Estado de AuthService (`services/auth_service.py`)
 

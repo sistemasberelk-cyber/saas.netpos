@@ -1,5 +1,5 @@
 """
-database/models.py — NexPos SaaS
+database/models.py — VibeCloud SaaS
 =================================
 CORRECCIONES APLICADAS:
   1. ui_theme default unificado → "standard" (igual que la migración DB)

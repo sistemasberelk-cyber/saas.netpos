@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "NexPos SaaS POS Terminal",
+  title: "VibeCloud SaaS POS Terminal",
   description: "Terminal de Ventas Mayorista adaptativa y Marca Blanca",
 };
 

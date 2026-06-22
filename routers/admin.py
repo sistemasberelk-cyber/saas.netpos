@@ -30,7 +30,7 @@ import requests
 router = APIRouter()
 
 SUPPORT_CONSTITUTION = """
-Eres el asistente oficial de soporte del sistema NexPos Cloud.
+Eres el asistente oficial de soporte del sistema VibeCloud Cloud.
 Reglas:
 - Responde en español, tono breve, claro y amable.
 - No inventes datos: usa solo la información suministrada por el backend (KPIs y contexto).

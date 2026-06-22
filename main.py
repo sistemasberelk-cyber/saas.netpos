@@ -1,4 +1,4 @@
-"""NexPos Cloud SaaS — Main Application (Refactored)"""
+"""VibeCloud Cloud SaaS — Main Application (Refactored)"""
 from fastapi import FastAPI, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -145,7 +145,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="NexPos Cloud", lifespan=lifespan)
+app = FastAPI(title="VibeCloud Cloud", lifespan=lifespan)
 
 # CORS
 def _get_cors_origins() -> list[str]:

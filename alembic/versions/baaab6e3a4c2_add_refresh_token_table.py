@@ -1,7 +1,7 @@
 """add refresh token table
 
 Revision ID: baaab6e3a4c2
-Revises: nexpos_all_fixes
+Revises: vibecloud_all_fixes
 Create Date: 2026-06-20 23:18:58.080131
 
 """
@@ -14,7 +14,7 @@ import sqlmodel
 
 # revision identifiers, used by Alembic.
 revision: str = 'baaab6e3a4c2'
-down_revision: Union[str, Sequence[str], None] = 'nexpos_all_fixes'
+down_revision: Union[str, Sequence[str], None] = 'vibecloud_all_fixes'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

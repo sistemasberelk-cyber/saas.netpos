@@ -1,7 +1,7 @@
 """
 scripts/backfill_stock_to_wms.py
 =================================
-EJECUTAR ANTES de la migración nexpos_all_fixes (FIX #4).
+EJECUTAR ANTES de la migración vibecloud_all_fixes (FIX #4).
 
 Crea un Location "Stock General" y un Bin "STOCK" por tenant,
 y copia product.stock_quantity → BinStock.quantity para todos los
@@ -141,13 +141,13 @@ def backfill(session: Session) -> None:
         session.commit()
         print(f"  Productos migrados: {migrated} | Ya tenían BinStock: {skipped}")
 
-    print("\n✅ Backfill completado. Podés correr la migración nexpos_all_fixes.")
+    print("\n✅ Backfill completado. Podés correr la migración vibecloud_all_fixes.")
 
 
 def encrypt_existing_api_keys(session: Session) -> None:
     """
     Cifra las api_key existentes con Fernet antes de renombrar la columna.
-    Ejecutar también antes de nexpos_all_fixes (FIX #7).
+    Ejecutar también antes de vibecloud_all_fixes (FIX #7).
     """
     from database.models import AICredential, BusinessConfig
     from database.models import encrypt_api_key

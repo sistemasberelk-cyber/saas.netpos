@@ -1,6 +1,6 @@
-"""nexpos_all_fixes
+"""vibecloud_all_fixes
 
-Aplica TODAS las correcciones al schema de NexPos SaaS:
+Aplica TODAS las correcciones al schema de VibeCloud SaaS:
   1. ui_theme server_default corregido a 'standard'
   2. Soft delete (is_deleted + deleted_at) en Supplier, User, Purchase, Location, Bin
   3. barcode: UniqueConstraint(tenant_id, barcode) — elimina unique global
@@ -10,7 +10,7 @@ Aplica TODAS las correcciones al schema de NexPos SaaS:
   7. AICredential: api_key → api_key_enc (texto plano eliminado)
   8. CashMovement: sale_id + purchase_id restaurados como FK tipadas
 
-Revision ID: nexpos_all_fixes
+Revision ID: vibecloud_all_fixes
 Revises: 47e6409a3538
 Create Date: 2026-05-17
 """
@@ -18,7 +18,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "nexpos_all_fixes"
+revision: str = "vibecloud_all_fixes"
 down_revision: Union[str, Sequence[str], None] = "47e6409a3538"
 branch_labels = None
 depends_on = None

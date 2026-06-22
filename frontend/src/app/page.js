@@ -257,7 +257,7 @@ export default function Home() {
         fontSize: '1.2rem',
         fontWeight: '600'
       }}>
-        Cargando interfaz adaptativa de NexPos...
+        Cargando interfaz adaptativa de VibeCloud...
       </div>
     );
   }

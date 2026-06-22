@@ -11,7 +11,7 @@ def setup_logging():
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
         
-    log_file = os.path.join(log_dir, "nexpos.log")
+    log_file = os.path.join(log_dir, "vibecloud.log")
     
     # Handler para archivo con rotación (10MB por archivo, máximo 5 archivos)
     file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5)
