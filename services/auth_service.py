@@ -43,6 +43,7 @@ class AuthService:
 
         # 1. Create or sync admin
         user = session.exec(select(User).where(User.username == "admin", User.tenant_id == tenant.id)).first()
+        admin_env_pw = os.getenv("ADMIN_PASSWORD")
         if not user:
             default_password = _get_secure_password("ADMIN_PASSWORD", "admin")
             hashed = AuthService.get_password_hash(default_password)
@@ -55,10 +56,12 @@ class AuthService:
             )
             session.add(user)
             print(f"INFO: Created default user 'admin' (Tenant: {tenant.id})")
-        else:
-            # Sincronización automática deshabilitada por solicitud.
-            # La clave se mantiene como esté en la BD.
-            pass
+        elif admin_env_pw:
+            if not AuthService.verify_password(admin_env_pw, user.password_hash):
+                user.password_hash = AuthService.get_password_hash(admin_env_pw)
+                session.add(user)
+                print("INFO: Admin password synced from ADMIN_PASSWORD env var")
+
 
         # 2. Create or sync superadmin
         superadmin = session.exec(select(User).where(User.username == "superadmin")).first()
